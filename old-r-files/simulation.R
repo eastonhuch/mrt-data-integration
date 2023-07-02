@@ -8,7 +8,7 @@ require(geepack)
 
 # Generate data
 run_simulation <- function() {
-dat <- generate_data(dof=1e10, ar_param=1e-200, t_max=2, n_internal=100000, n_external=100000)
+dat <- generate_data(dof=1e10, ar_param=1e-200, t_max=2, n_internal=10000, n_external=10000)
 
 make_Gamma <- function(gamma_x2) {
   cbind(
@@ -16,6 +16,10 @@ make_Gamma <- function(gamma_x2) {
     c(0, 1, 0, 0),
     gamma_x2)
 }
+beta_s_true <- c(1, 2, -3)
+gamma_x2_true <- c(2, 1, -0.3, -0.1)
+beta_r_true <- c(-5, -1, 0.9, 0.3)
+theta_true <- c(beta_s_true, gamma_x2_true)
 
 # Get point estimates
 # Propensity score model
@@ -72,35 +76,34 @@ pos_theta <- seq(
   length(alpha_s) + length(beta_h) + 1,
   length(vector_estimate)
 )
-Sigma <- sandwich[pos_theta, pos_theta]
+theta <- c(beta_s, gamma_x2)
+theta_error <- theta - theta_true
+var_theta <- sandwich[pos_theta, pos_theta]
+theta_chi2 <- theta_error %*% solve(var_theta, theta_error) # Checked
+
+beta_s_error <- beta_s - beta_s_true
+wcls_gee_mod <- geeglm(wcls_formula, data=dat, weights=w, id=user_id)
+beta_s_chi2 <- beta_s_error %*% solve(var_theta[1:3, 1:3], beta_s_error) # Checked
+
+gamma_x2_error <- gamma_x2 - gamma_x2_true
+gamma_x2_chi2 <- gamma_x2_error %*% solve(var_theta[4:7, 4:7], gamma_x2_error) # Checked
+
 J_theta <- cbind(
-  beta_s[3] * diag(d_r),
-  Gamma
+  Gamma,
+  beta_s[3] * diag(d_r)
 )
-var_beta_r <- J_theta %*% Sigma %*% t(J_theta)
+var_beta_r <- J_theta %*% var_theta %*% t(J_theta)
 se_beta_r <- sqrt(diag(var_beta_r))
-beta_r_error <- (beta_r - c(-5, -1, 0.9, 0.3))
-z_scores <- beta_r_error / se_beta_r
-chi2_value <- beta_r_error %*% solve(var_beta_r, beta_r_error)
-chi2_value
+beta_r_error <- beta_r - beta_r_true
+beta_r_z_scores <- beta_r_error / se_beta_r
+beta_r_chi2 <- beta_r_error %*% solve(var_beta_r, beta_r_error)
+
+beta_r_chi2
 }
 
 run_simulation()
-#chi2_values <- replicate(100, run_simulation())
-#mean(chi2_values)
-#median(chi2_values)
-#hist(chi2_values)
-
-# To run these checks, run this file, set data=dat and run the interior of eastons_sandwich
-sqrt(sandwich[1, 1]) / sqrt(vcov(p_s_mod))
-(meat[1, 1] / hessian[1, 1]^2) / vcov(p_s_mod) # Same
-
-wcls_gee_mod <- geeglm(wcls_formula, data=dat, weights=w, id=user_id)
-sqrt(diag(sandwich[2:8, 2:8])) / sqrt(diag(vcov(wcls_gee_mod)))
-sqrt(diag(solve(hessian[2:8, 2:8]) %*% meat[2:8, 2:8] %*% solve(hessian[2:8, 2:8]))) /
-  sqrt(diag(vcov(wcls_gee_mod))) # Same
-
-gamma_x2_gee_mod <- geeglm(s_formula, data=dat, id=user_id, subset=is_internal)
-sqrt(diag(solve(hessian[9:12, 9:12]) %*% meat[9:12, 9:12] %*% solve(hessian[9:12, 9:12]))) /
-  sqrt(diag(sandwich[9:12, 9:12]))
-sqrt(diag(sandwich[9:12, 9:12])) / sqrt(diag(vcov(gamma_x2_gee_mod))) # Same
+chi2_values <- replicate(100, run_simulation())
+mean(chi2_values)
+median(chi2_values)
+hist(chi2_values, breaks=seq(0, 70)) # This is close but not great
+hist(rchisq(100, 4), breaks=seq(0, 70))

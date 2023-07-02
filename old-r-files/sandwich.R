@@ -60,14 +60,13 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_hs_scaled <- sqrt(w) * X_beta_hs
   hessian[pos_beta_hs, pos_beta_hs] <- crossprod(X_beta_hs_scaled)
   
-  # This is the only part I couldn't check with geeglm
-  p_s_a_deriv <- -(a/(1-p_s) + (1-a)*p_s)
-  p_s_deriv <- -1/(1-p_s)
-  p_s_X_beta_s <- (-p_s) * X_beta_s_raw
+  p_s_a_deriv <- (a*(1-p_s) + (1-a)*p_s) / p_s_a
+  p_s_deriv <- 1-p_s
+  p_s_X_beta_s <- p_s * X_beta_s_raw
   hessian[pos_beta_hs, pos_alpha_s] <- 
     t(X_beta_hs * wcls_weighted_resids) %*% p_s_a_deriv +
-    t(cbind(matrix(0, nrow=n, ncol=d_h), p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
-    t(X_beta_hs * (p_s * wcls_s_fitted_values * w)) %*% p_s_deriv
+    t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
+    t(X_beta_hs * (p_s * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
   hessian[pos_alpha_s, pos_beta_hs] <- t(hessian[pos_beta_hs, pos_alpha_s])
   
   # Gamma score
