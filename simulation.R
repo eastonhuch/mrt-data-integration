@@ -2,8 +2,8 @@
 # "Data integration methods for micro-randomized trials"
 
 #set.seed(1)
-source("~/Documents/research/mrt-data-integration/old-r-files/generate_data.R")
-source("~/Documents/research/mrt-data-integration/old-r-files/sandwich.R")
+source("~/Documents/research/mrt-data-integration/generate_data.R")
+source("~/Documents/research/mrt-data-integration/sandwich.R")
 require(geepack)
 
 # Generate data
