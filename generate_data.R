@@ -1,6 +1,6 @@
 # Function for simulating data
 generate_data <- function(
-  t_max=20, dof=6, n_internal=100, n_external=100,
+  t_max=20, dof=10, n_internal=100, n_external=100,
   ar_param=0.5, plot_simulated_data=FALSE) {
   
   # Internal indicator

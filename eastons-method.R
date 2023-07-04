@@ -67,7 +67,6 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     t(X_beta_hs * wcls_weighted_resids) %*% p_s_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
     t(X_beta_hs * (p_s * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
-  hessian[pos_alpha_s, pos_beta_hs] <- t(hessian[pos_beta_hs, pos_alpha_s])
   
   # Gamma score
   scores[is_internal, pos_gamma_x2] <- (x2_internal - c(X_gamma_x2_internal %*% gamma_x2)) * X_gamma_x2_internal
@@ -77,4 +76,92 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
   sandwich
+}
+
+eastons_method <- function(data) {
+  make_Gamma <- function(gamma_x2) {
+    cbind(
+      c(1, 0, 0, 0),
+      c(0, 1, 0, 0),
+      gamma_x2)
+  }
+  beta_s_true <- c(1, 2, -3)
+  gamma_x2_true <- c(2, 1, -0.3, -0.1)
+  beta_r_true <- c(-5, -1, 0.9, 0.3)
+  theta_true <- c(beta_s_true, gamma_x2_true)
+  
+  # Get point estimates
+  # Propensity score model
+  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
+  alpha_s <- coef(p_s_mod)
+  data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
+  data$a_centered <- data$a - data$p_s_hat
+  data$p_s_hat_a <- data$a * data$p_s_hat + (1 - data$a) * (1 - data$p_s_hat)
+  data$w <- data$p_s_hat_a / data$p_h_a
+  
+  # WCLS
+  beta_h_formula <- y ~ x1 + x2 + x3
+  beta_s_formula <- y ~ 0 + a_centered + I(a_centered * x1) + I(a_centered * x2)
+  beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
+  beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
+  wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
+  wcls_mod <- lm(wcls_formula, data=data, weights=w)
+  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
+  beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
+  beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
+  d_s <- length(beta_s)
+  
+  # Gamma
+  s_formula <- x2 ~ x1 + I(x1^2) + I(x1^3)
+  s_mod <- glm(s_formula, data=data, subset=data$is_internal)
+  gamma_x2 <- coef(s_mod)
+  Gamma <- make_Gamma(gamma_x2)
+  row.names(Gamma) <- names(gamma_x2)
+  
+  # beta_r
+  beta_r <- c(Gamma %*% beta_s)
+  d_r <- length(beta_r)
+  names(beta_r) <- row.names(Gamma)
+  
+  # Models list
+  models <- list(
+    p_s=p_s_mod,
+    wcls=wcls_mod,
+    s=s_mod
+  )
+  
+  # Total number of parameters
+  vector_estimate <- c(
+    alpha_s,
+    beta_h,
+    beta_s,
+    gamma_x2
+  )
+  n_params <- length(vector_estimate)
+  
+  # Standard errors
+  sandwich <- eastons_sandwich(data, models, beta_h_formula, beta_s_formula)
+  pos_theta <- seq(
+    length(alpha_s) + length(beta_h) + 1,
+    length(vector_estimate)
+  )
+  var_theta <- sandwich[pos_theta, pos_theta]
+  J_theta <- cbind(
+    Gamma,
+    beta_s[3] * diag(d_r)
+  )
+  var_beta_r <- J_theta %*% var_theta %*% t(J_theta)
+  se_beta_r <- sqrt(diag(var_beta_r))
+  beta_r_error <- beta_r - beta_r_true
+  beta_r_z_scores <- beta_r_error / se_beta_r
+  beta_r_chi2 <- beta_r_error %*% solve(var_beta_r, beta_r_error)
+  
+  results <- list(
+    beta_r=beta_r,
+    se_beta_r=se_beta_r,
+    var_beta_r=var_beta_r,
+    beta_r_chi2=beta_r_chi2,
+    se_beta_s=sqrt(diag(var_theta[1:3, 1:3]))
+  )
+  results
 }
