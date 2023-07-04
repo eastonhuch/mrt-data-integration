@@ -8,16 +8,17 @@ source("~/Documents/research/mrt-data-integration/walters-method.R")
 require(geepack)
 
 # Generate data
+n <- 100000
 run_simulation <- function() {
-  dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=1000, n_external=1000)
+  dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=n, n_external=n)
   c(eastons_method(dat)$beta_r_chi2, walters_method(dat)$beta_r_chi2)
 }
 
-chi2_values <- replicate(1000, run_simulation())
+chi2_values <- replicate(100, run_simulation())
 
-hist(chi2_values[1,], breaks=seq(0, 300))
-hist(chi2_values[2,], breaks=seq(0, 300))
-hist(rchisq(1000, 4), breaks=seq(0, 300))
+hist(chi2_values[1,], breaks=seq(0, 200))
+hist(chi2_values[2,], breaks=seq(0, 200))
+hist(rchisq(100, 4), breaks=seq(0, 200))
 
 mean(chi2_values[1,])
 mean(chi2_values[2,])

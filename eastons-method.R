@@ -9,12 +9,12 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   x2_internal <- data$x2[is_internal]
   
   # Construct design matrices
-  X_alpha_s <- model.matrix(models$p_s$formula, data=data)
+  X_alpha_s <- model.matrix(formula(models$p_s), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
   X_beta_s <- model.matrix(beta_s_formula, data=data)
   X_beta_s_raw <- X_beta_s / a_centered
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
-  X_gamma_x2_internal <- model.matrix(models$s$formula, data=data[data$is_internal,])
+  X_gamma_x2_internal <- model.matrix(formula(models$s), data=data[data$is_internal,])
   
   # Store dimensions
   n <- nrow(X_beta_h)
@@ -113,7 +113,7 @@ eastons_method <- function(data) {
   
   # Gamma
   s_formula <- x2 ~ x1 + I(x1^2) + I(x1^3)
-  s_mod <- glm(s_formula, data=data, subset=data$is_internal)
+  s_mod <- glm(s_formula, data=data[data$is_internal,])
   gamma_x2 <- coef(s_mod)
   Gamma <- make_Gamma(gamma_x2)
   row.names(Gamma) <- names(gamma_x2)
