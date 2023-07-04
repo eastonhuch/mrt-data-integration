@@ -1,4 +1,3 @@
-# The only part of this function I'm not super confident is 
 walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   # Extract some columns
   y <- data$y
@@ -38,18 +37,18 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
   pos_beta_r <- max(pos_beta_s) + seq(d_r)
   
-  # p_s score/hessian
+  # p_s_hat score/hessian
   scores <- matrix(0, nrow=n, ncol=d)
   hessian <- matrix(0, nrow=d, ncol=d)
-  p_s <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))  # Assume logit link
-  scores[, pos_alpha_s] <- (a - p_s) * X_alpha_s
-  sd_p_s <- sqrt(p_s * (1-p_s))
-  X_alpha_s_scaled <- sd_p_s * X_alpha_s
+  p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))  # Assume logit link
+  scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
+  sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
+  X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
   hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled)
   
   # WCLS scores and Hessian
-  p_s_a <- a*p_s + (1-a)*(1-p_s)
-  w <- p_s_a / p_h_a
+  p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
+  w <- p_s_hat_a / p_h_a
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_s_fitted_values <- c(X_beta_s %*% beta_s)
   X_beta_s_no_a <- X_beta_s / a_centered
@@ -62,13 +61,13 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_hs_scaled <- sqrt(w) * X_beta_hs
   hessian[pos_beta_hs, pos_beta_hs] <- crossprod(X_beta_hs_scaled)
   
-  p_s_a_deriv <- (a*(1-p_s) + (1-a)*p_s) / p_s_a
-  p_s_deriv <- 1-p_s
-  p_s_X_beta_s <- p_s * X_beta_s_raw
+  p_s_hat_a_deriv <- -((a*(1-p_s_hat) + (1-a)*p_s_hat) / p_s_hat_a)
+  p_s_deriv <- -(1-p_s_hat)
+  p_s_X_beta_s <- p_s_hat * X_beta_s_raw
   hessian[pos_beta_hs, pos_alpha_s] <- 
-    t(X_beta_hs * wcls_weighted_resids) %*% p_s_a_deriv +
+    t(X_beta_hs * wcls_weighted_resids) %*% p_s_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
-    t(X_beta_hs * (p_s * wcls_s_causal_effects * w)) %*% p_s_deriv
+    t(X_beta_hs * (p_s_hat * wcls_s_causal_effects * w)) %*% p_s_deriv
   
   # beta_r score
   scores[is_internal, pos_beta_r] <- (wcls_s_causal_effects - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
@@ -78,7 +77,11 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   meat <- crossprod(scores)
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
-  sandwich
+  list(
+    sandwich=sandwich,
+    bread=hessian,
+    meat=meat
+  )
 }
 
 # Need models$r for projection
@@ -133,7 +136,8 @@ walters_method <- function(data) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich <- walters_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich_list <- walters_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich <- sandwich_list$sandwich
   pos_beta_r <- seq(
     length(alpha_s) + length(beta_h) + length(beta_s) + 1,
     length(vector_estimate)
@@ -149,7 +153,9 @@ walters_method <- function(data) {
     se_beta_r=se_beta_r,
     var_beta_r=var_beta_r,
     beta_r_chi2=beta_r_chi2,
-    sandwich=sandwich
+    sandwich=sandwich,
+    bread=sandwich_list$bread,
+    meat=sandwich_list$meat
   )
   results
 }

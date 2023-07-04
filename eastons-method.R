@@ -1,4 +1,3 @@
-# The only part of this function I'm not super confident is 
 eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   # Extract some columns
   y <- data$y
@@ -38,18 +37,18 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
   pos_gamma_x2 <- max(pos_beta_s) + seq(d_r)
   
-  # p_s score/hessian
+  # p_s_hat score/hessian
   scores <- matrix(0, nrow=n, ncol=d)
   hessian <- matrix(0, nrow=d, ncol=d)
-  p_s <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))  # Assume logit link
-  scores[, pos_alpha_s] <- (a - p_s) * X_alpha_s
-  sd_p_s <- sqrt(p_s * (1-p_s))
-  X_alpha_s_scaled <- sd_p_s * X_alpha_s
+  p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))  # Assume logit link
+  scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
+  sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
+  X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
   hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled)
   
   # WCLS scores and Hessian
-  p_s_a <- a*p_s + (1-a)*(1-p_s)
-  w <- p_s_a / p_h_a
+  p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
+  w <- p_s_hat_a / p_h_a
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_s_fitted_values <- c(X_beta_s %*% beta_s)
   wcls_resids <- c(y - wcls_h_fitted_values - wcls_s_fitted_values)
@@ -60,13 +59,13 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_hs_scaled <- sqrt(w) * X_beta_hs
   hessian[pos_beta_hs, pos_beta_hs] <- crossprod(X_beta_hs_scaled)
   
-  p_s_a_deriv <- (a*(1-p_s) + (1-a)*p_s) / p_s_a
-  p_s_deriv <- 1-p_s
-  p_s_X_beta_s <- p_s * X_beta_s_raw
+  p_s_hat_a_deriv <- -((2*a-1) * p_s_hat * (1 - p_s_hat) / p_s_hat_a)
+  p_s_deriv <- -(1-p_s_hat)
+  p_s_X_beta_s <- p_s_hat * X_beta_s_raw
   hessian[pos_beta_hs, pos_alpha_s] <- 
-    t(X_beta_hs * wcls_weighted_resids) %*% p_s_a_deriv +
+    t(X_beta_hs * wcls_weighted_resids) %*% p_s_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
-    t(X_beta_hs * (p_s * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
+    t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
   
   # Gamma score
   scores[is_internal, pos_gamma_x2] <- (x2_internal - c(X_gamma_x2_internal %*% gamma_x2)) * X_gamma_x2_internal
@@ -75,7 +74,11 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   meat <- crossprod(scores)
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
-  sandwich
+  list(
+    sandwich=sandwich,
+    bread=hessian,
+    meat=meat
+  )
 }
 
 eastons_method <- function(data) {
@@ -101,7 +104,7 @@ eastons_method <- function(data) {
   
   # WCLS
   beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + a_centered + I(a_centered * x1) + I(a_centered * x2)
+  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
@@ -140,7 +143,8 @@ eastons_method <- function(data) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich <- eastons_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich_list <- eastons_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich <- sandwich_list$sandwich
   pos_theta <- seq(
     length(alpha_s) + length(beta_h) + 1,
     length(vector_estimate)
@@ -161,7 +165,10 @@ eastons_method <- function(data) {
     se_beta_r=se_beta_r,
     var_beta_r=var_beta_r,
     beta_r_chi2=beta_r_chi2,
-    se_beta_s=sqrt(diag(var_theta[1:3, 1:3]))
+    se_beta_s=sqrt(diag(var_theta[1:3, 1:3])),
+    sandwich=sandwich,
+    bread=sandwich_list$bread,
+    meat=sandwich_list$meat
   )
   results
 }
