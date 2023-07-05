@@ -91,12 +91,4 @@ max(abs(geex_bread - eastons_results$bread))
 
 # These are essentially identical
 geex_meat <- grab_meat(fitted_model@sandwich_components)
-zapsmall(geex_meat - eastons_results$meat)
-zapsmall(geex_meat / eastons_results$meat)
-max(abs(geex_meat - eastons_results$meat))
-
-# Whoa, everything involving the last model is completely wrong
-
-# geex sandwich is formed as expected
-#geex_reconstructed_sandwich <- solve(geex_bread) %*% geex_meat %*% t(solve(geex_bread))
-#vcov(fitted_model) / geex_reconstructed_sandwich
+max(abs(geex_meat - walters_results$meat))
