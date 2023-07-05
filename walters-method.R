@@ -51,8 +51,6 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   w <- p_s_hat_a / p_h_a
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_s_fitted_values <- c(X_beta_s %*% beta_s)
-  X_beta_s_no_a <- X_beta_s / a_centered
-  wcls_s_causal_effects <- c(X_beta_s_no_a %*% beta_s)
   wcls_resids <- c(y - wcls_h_fitted_values - wcls_s_fitted_values)
   wcls_weighted_resids <- w * wcls_resids
   scores[, pos_beta_h] <- wcls_weighted_resids * X_beta_h
@@ -61,18 +59,17 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_hs_scaled <- sqrt(w) * X_beta_hs
   hessian[pos_beta_hs, pos_beta_hs] <- crossprod(X_beta_hs_scaled)
   
-  p_s_hat_a_deriv <- -((a*(1-p_s_hat) + (1-a)*p_s_hat) / p_s_hat_a)
+  p_s_hat_a_deriv <- -((2*a-1) * p_s_hat * (1 - p_s_hat) / p_s_hat_a)
   p_s_deriv <- -(1-p_s_hat)
   p_s_X_beta_s <- p_s_hat * X_beta_s_raw
   hessian[pos_beta_hs, pos_alpha_s] <- 
     t(X_beta_hs * wcls_weighted_resids) %*% p_s_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% p_s_deriv +
-    t(X_beta_hs * (p_s_hat * wcls_s_causal_effects * w)) %*% p_s_deriv
+    t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
   
   # beta_r score
-  scores[is_internal, pos_beta_r] <- (wcls_s_causal_effects - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
+  scores[is_internal, pos_beta_r] <- (data$wcls_s_causal_effects[data$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
-  hessian[pos_beta_r, pos_beta_s] <- -(t(X_beta_r_internal) %*% X_beta_s_no_a[data$is_internal,])
   
   meat <- crossprod(scores)
   half_sandwich <- solve(hessian, t(chol(meat)))
@@ -84,11 +81,9 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   )
 }
 
-# Need models$r for projection
 walters_method <- function(data) {
   beta_s_true <- c(1, 2, -3)
   beta_r_true <- c(-5, -1, 0.9, 0.3)
-  theta_true <- c(beta_s_true, beta_r_true)
   
   # Get point estimates
   # Propensity score model
@@ -98,12 +93,10 @@ walters_method <- function(data) {
   data$a_centered <- data$a - data$p_s_hat
   data$p_s_hat_a <- data$a * data$p_s_hat + (1 - data$a) * (1 - data$p_s_hat)
   data$w <- data$p_s_hat_a / data$p_h_a
-  data$wcls_s_causal_effects <- 0
-  data_internal <- data[data$is_internal,]
   
   # WCLS
   beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + a_centered + I(a_centered * x1) + I(a_centered * x2)
+  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
@@ -111,14 +104,14 @@ walters_method <- function(data) {
   last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
+  data$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data) %*% beta_s) / data$a_centered
   d_s <- length(beta_s)
-  data_internal$wcls_s_causal_effects <- (model.matrix(beta_s_formula, data_internal) %*% beta_s) / data_internal$a_centered
   
   # beta_r
-  r_mod <- lm(wcls_s_causal_effects ~ x1 + I(x1^2) + I(x1^3), data=data_internal)
+  r_formula <- wcls_s_causal_effects ~ x1 + I(x1^2) + I(x1^3)
+  r_mod <- glm(r_formula, data=data[data$is_internal,])
   beta_r <- coef(r_mod)
-  d_r <- length(beta_r)
-  
+
   # Models list
   models <- list(
     p_s=p_s_mod,
@@ -138,10 +131,7 @@ walters_method <- function(data) {
   # Standard errors
   sandwich_list <- walters_sandwich(data, models, beta_h_formula, beta_s_formula)
   sandwich <- sandwich_list$sandwich
-  pos_beta_r <- seq(
-    length(alpha_s) + length(beta_h) + length(beta_s) + 1,
-    length(vector_estimate)
-  )
+  pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   se_beta_r <- sqrt(diag(var_beta_r))
   beta_r_error <- beta_r - beta_r_true

@@ -6,8 +6,9 @@ source("~/Documents/research/mrt-data-integration/generate_data.R")
 source("~/Documents/research/mrt-data-integration/eastons-method.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 require(geepack)
+require(geex)
 
-dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=20, n_external=20)
+dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=22, n_external=20)
 eastons_method(dat)$beta_r
 walters_method(dat)$beta_r
 
@@ -29,15 +30,7 @@ walters_results <- walters_method(dat)
 
 ##############
 # OLD WAY
-source("~/Documents/research/mrt-data-integration/geex-implementation.R")
-
-# Generate data
-make_Gamma <- function(gamma_x2) {
-  cbind(
-    c(1, 0, 0, 0),
-    c(0, 1, 0, 0),
-    gamma_x2)
-}
+source("~/Documents/research/mrt-data-integration/walter-geex.R")
 
 # Get point estimates
 # Propensity score model
@@ -59,53 +52,51 @@ beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
 beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
 d_s <- length(beta_s)
 
-# Gamma
-s_formula <- x2 ~ x1 + I(x1^2) + I(x1^3)
-s_mod <- glm(s_formula, data=dat, subset=dat$is_internal)
-gamma_x2 <- coef(s_mod)
-Gamma <- make_Gamma(gamma_x2)
-row.names(Gamma) <- names(gamma_x2)
-
 # beta_r
-beta_r <- c(Gamma %*% beta_s)
-d_r <- length(beta_r)
-names(beta_r) <- row.names(Gamma)
-beta_r
+dat$wcls_s_causal_effects <- (model.matrix(beta_s_formula, dat) %*% beta_s) / dat$a_centered
+r_mod <- glm(wcls_s_causal_effects ~ x1 + I(x1^2) + I(x1^3), data=dat, subset=dat$is_internal)
+S <- resid(r_mod) * model.matrix(r_mod, data=dat)
+crossprod(S)
+beta_r <- coef(r_mod)
 
 # Models list
 models_list <- list(
   p_s=p_s_mod,
   wcls=wcls_mod,
-  s=s_mod
+  r=r_mod
 )
-models$p_s
 
 # Total number of parameters
 vector_estimate <- c(
   alpha_s,
   beta_h,
   beta_s,
-  gamma_x2
+  beta_r
 )
 n_params <- length(vector_estimate)
 
 # Standard errors
 fitted_model <- m_estimate(
-  estFUN = eastons_est_fun, 
-  data   = dat,
-  root_control = setup_root_control(start = rep(0, n_params)),
+  estFUN = walters_est_fun, 
+  data = dat,
+  root_control = setup_root_control(start=vector_estimate),
   roots=vector_estimate,
   compute_roots = FALSE,
   outer_args = list(models=models_list, beta_h_formula=beta_h_formula, beta_s_formula=beta_s_formula)
 )
-# These differ slightly in the 5, 1 element
+
+# These are essentially identical
 geex_bread <- grab_bread(fitted_model@sandwich_components)
 max(abs(geex_bread - eastons_results$bread))
 
 # These are essentially identical
 geex_meat <- grab_meat(fitted_model@sandwich_components)
+zapsmall(geex_meat - eastons_results$meat)
+zapsmall(geex_meat / eastons_results$meat)
 max(abs(geex_meat - eastons_results$meat))
 
+# Whoa, everything involving the last model is completely wrong
+
 # geex sandwich is formed as expected
-geex_reconstructed_sandwich <- solve(geex_bread) %*% geex_meat %*% t(solve(geex_bread))
-vcov(fitted_model) / geex_reconstructed_sandwich
+#geex_reconstructed_sandwich <- solve(geex_bread) %*% geex_meat %*% t(solve(geex_bread))
+#vcov(fitted_model) / geex_reconstructed_sandwich
