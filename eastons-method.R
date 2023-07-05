@@ -165,6 +165,7 @@ eastons_method <- function(data) {
     se_beta_r=se_beta_r,
     var_beta_r=var_beta_r,
     beta_r_chi2=beta_r_chi2,
+    beta_r_z_scores=beta_r_z_scores,
     se_beta_s=sqrt(diag(var_theta[1:3, 1:3])),
     sandwich=sandwich,
     bread=sandwich_list$bread,

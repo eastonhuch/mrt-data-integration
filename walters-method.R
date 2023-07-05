@@ -143,6 +143,7 @@ walters_method <- function(data) {
     se_beta_r=se_beta_r,
     var_beta_r=var_beta_r,
     beta_r_chi2=beta_r_chi2,
+    beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
     meat=sandwich_list$meat

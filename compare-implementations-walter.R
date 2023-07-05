@@ -85,10 +85,19 @@ fitted_model <- m_estimate(
   outer_args = list(models=models_list, beta_h_formula=beta_h_formula, beta_s_formula=beta_s_formula)
 )
 
-# These are essentially identical
+# Bread: almost identical
 geex_bread <- grab_bread(fitted_model@sandwich_components)
 max(abs(geex_bread - eastons_results$bread))
 
-# These are essentially identical
+# Meat: almost identical
 geex_meat <- grab_meat(fitted_model@sandwich_components)
 max(abs(geex_meat - walters_results$meat))
+
+# Sandwich: almost identical
+max(abs(vcov(fitted_model) - walters_results$sandwich))
+
+# Comparison between methods
+eastons_results$sandwich / walters_results$sandwich # Bottom 4 differ as expected
+eastons_results$var_beta_r / walters_results$var_beta_r # This is really strange
+
+# I think J_theta is wrong
