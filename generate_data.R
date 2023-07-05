@@ -19,9 +19,9 @@ generate_data <- function(
       nrow=t_max*2, ncol=n
     )[1:t_max,])
   }
-  r <- x1 <- gen_ar1_matrix() + 1
-  x2 <- x1 + is_internal * (2 - 0.3*x1^2 -0.1*x1^3) + rt(n_obs, dof)
-  x3 <- -1 + 0.5*x1 - 0.3*x2 + rt(n_obs, dof)
+  r <- x1 <- gen_ar1_matrix() #+ 1
+  x2 <- x1 + is_internal * (2 - 0.3*x1^2 - 0.1*x1^3) + rt(n_obs, dof)
+  x3 <- -1 + 0.5*x1 + 0.7*x2 + rt(n_obs, dof)
   
   # Plots to check that relationships look right
   if (plot_simulated_data) {
@@ -88,3 +88,7 @@ generate_data <- function(
   dat$ones <- 1
   dat
 }
+
+#dat <- generate_data(t_max=10, n_internal=10000, n_external=10000)
+#mean(dat$x2[dat$is_internal])
+#mean(dat$x3[dat$is_internal])

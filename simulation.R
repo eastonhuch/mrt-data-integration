@@ -19,7 +19,7 @@ chi2_values <- replicate(n_replications, run_simulation())
 
 max_chi2 <- max(chi2_values)
 chi2_breaks <- seq(0, max_chi2+1)
-chi2_breaks <- seq(0, max(chi2_values[1,])+1)
+#chi2_breaks <- seq(0, max(chi2_values[1,])+1)
 hist(chi2_values[1,], breaks=chi2_breaks)
 hist(chi2_values[2,], breaks=chi2_breaks) # This must be wrong
 hist(rchisq(n_replications, 4), breaks=chi2_breaks)
@@ -30,7 +30,7 @@ mean(chi2_values[2,])
 median(chi2_values[1,])
 median(chi2_values[2,])
 
-dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=100000, n_external=100000)
+dat <- generate_data(dof=1e10, ar_param=1e-10, t_max=2, n_internal=1000, n_external=1000)
 
 dat$p_s <- mean(dat$a)
 dat$a_centered <- dat$a - dat$p_s
