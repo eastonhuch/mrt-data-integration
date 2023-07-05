@@ -14,7 +14,7 @@ run_simulation <- function() {
   c(eastons_method(dat)$beta_r_chi2, walters_method(dat)$beta_r_chi2)
 }
 
-n_replications <- 1000
+n_replications <- 100
 chi2_values <- replicate(n_replications, run_simulation())
 
 max_chi2 <- max(chi2_values)

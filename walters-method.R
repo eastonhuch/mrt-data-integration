@@ -76,33 +76,33 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
   hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data$is_internal,]
   
-  # This part sucks
-  # NOTE: Negative are included in p_s_hat_a_deriv already
-  hess_beta_s_alpha_left_deriv_middle_left <- t(X_beta_hs) %*% (p_s_hat_a_deriv / p_h_a * X_beta_hs)
-  
-  hess_beta_s_alpha_left_deriv_middle_right <- matrix(0, nrow=d_hs, ncol=d_hs)
-  hess_beta_s_alpha_left_deriv_middle_right[seq(d_h), seq(d_h+1, d_hs)] <-
-    t(X_beta_h) %*% (-p_s_hat_a_deriv * w * X_beta_s_raw)
-  hess_beta_s_alpha_left_deriv_middle_right[seq(d_h+1, d_hs), seq(d_h)] <- t(
-    hess_beta_s_alpha_left_deriv_middle_right[seq(d_h), seq(d_h+1, d_hs)])
-  hess_beta_s_alpha_left_deriv_middle_right[seq(d_h+1, d_hs), seq(d_h+1, d_hs)] <-
-    - t(X_beta_s_raw) %*% (2 * a_centered * p_s_hat_a_deriv * X_beta_s_raw)
-  
-  hess_beta_s_alpha_left_deriv_middle <- hess_beta_s_alpha_left_deriv_middle_left + hess_beta_s_alpha_left_deriv_middle_right
-  GtWGi <- chol2inv(chol(GtWG))
-  hess_beta_s_alpha_left_deriv = GtWGi %*% hess_beta_s_alpha_left_deriv_middle %*% GtWGi
-  GtWy <- t(X_beta_hs) %*% (w * y)
-  hess_beta_s_alpha_left = hess_beta_s_alpha_left_deriv %*% GtWy
-    
-  hess_beta_s_alpha_right_deriv_left = t(X_beta_hs) %*% (y / p_h_a * p_s_hat_a_deriv)
-  hess_beta_s_alpha_right_deriv_right = t(cbind(matrix(0, nrow=n, ncol=d_h), -X_beta_s_raw)) %*% (w * y)
-  hess_beta_s_alpha_right_deriv = hess_beta_s_alpha_right_deriv_left + hess_beta_s_alpha_right_deriv_right
-  hess_beta_s_alpha_right <- GtWGi %*% hess_beta_s_alpha_right_deriv
-  
-  hess_beta_s_alpha <- hess_beta_s_alpha_left + hess_beta_s_alpha_right
-  hessian[pos_beta_r, pos_alpha_s] <- -t(X_beta_r_internal) %*%
-    cbind(matrix(0, nrow=nrow(X_beta_r_internal), ncol=d_h), X_beta_s_raw[data$is_internal,]) %*%
-    c(hess_beta_s_alpha)
+  # # This part sucks
+  # # NOTE: Negative are included in p_s_hat_a_deriv already
+  # hess_beta_s_alpha_left_deriv_middle_left <- t(X_beta_hs) %*% (p_s_hat_a_deriv / p_h_a * X_beta_hs)
+  # 
+  # hess_beta_s_alpha_left_deriv_middle_right <- matrix(0, nrow=d_hs, ncol=d_hs)
+  # hess_beta_s_alpha_left_deriv_middle_right[seq(d_h), seq(d_h+1, d_hs)] <-
+  #   t(X_beta_h) %*% (-p_s_hat_a_deriv * w * X_beta_s_raw)
+  # hess_beta_s_alpha_left_deriv_middle_right[seq(d_h+1, d_hs), seq(d_h)] <- t(
+  #   hess_beta_s_alpha_left_deriv_middle_right[seq(d_h), seq(d_h+1, d_hs)])
+  # hess_beta_s_alpha_left_deriv_middle_right[seq(d_h+1, d_hs), seq(d_h+1, d_hs)] <-
+  #   - t(X_beta_s_raw) %*% (2 * a_centered * p_s_hat_a_deriv * X_beta_s_raw)
+  # 
+  # hess_beta_s_alpha_left_deriv_middle <- hess_beta_s_alpha_left_deriv_middle_left + hess_beta_s_alpha_left_deriv_middle_right
+  # GtWGi <- chol2inv(chol(GtWG))
+  # hess_beta_s_alpha_left_deriv = GtWGi %*% hess_beta_s_alpha_left_deriv_middle %*% GtWGi
+  # GtWy <- t(X_beta_hs) %*% (w * y)
+  # hess_beta_s_alpha_left = hess_beta_s_alpha_left_deriv %*% GtWy
+  #   
+  # hess_beta_s_alpha_right_deriv_left = t(X_beta_hs) %*% (y / p_h_a * p_s_hat_a_deriv)
+  # hess_beta_s_alpha_right_deriv_right = t(cbind(matrix(0, nrow=n, ncol=d_h), -X_beta_s_raw)) %*% (w * y)
+  # hess_beta_s_alpha_right_deriv = hess_beta_s_alpha_right_deriv_left + hess_beta_s_alpha_right_deriv_right
+  # hess_beta_s_alpha_right <- GtWGi %*% hess_beta_s_alpha_right_deriv
+  # 
+  # hess_beta_s_alpha <- hess_beta_s_alpha_left + hess_beta_s_alpha_right
+  # hessian[pos_beta_r, pos_alpha_s] <- -t(X_beta_r_internal) %*%
+  #   cbind(matrix(0, nrow=nrow(X_beta_r_internal), ncol=d_h), X_beta_s_raw[data$is_internal,]) %*%
+  #   c(hess_beta_s_alpha)
   
   # Assemble sandwich
   meat <- crossprod(scores)
