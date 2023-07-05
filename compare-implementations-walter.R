@@ -87,14 +87,21 @@ fitted_model <- m_estimate(
 
 # Bread: almost identical
 geex_bread <- grab_bread(fitted_model@sandwich_components)
-max(abs(geex_bread - eastons_results$bread))
+max(abs(geex_bread - walters_results$bread))
+geex_bread / walters_results$bread
+walters_results$bread / geex_bread
 
 # Meat: almost identical
 geex_meat <- grab_meat(fitted_model@sandwich_components)
 max(abs(geex_meat - walters_results$meat))
+walters_results$meat / geex_meat
+walters_results$meat - geex_meat
 
 # Sandwich: almost identical
 max(abs(vcov(fitted_model) - walters_results$sandwich))
+zapsmall(vcov(fitted_model) / walters_results$sandwich)
+max(walters_results$sandwich)
+max(vcov(fitted_model))
 
 # Comparison between methods
 eastons_results$sandwich / walters_results$sandwich # Bottom 4 differ as expected

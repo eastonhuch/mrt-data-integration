@@ -24,8 +24,9 @@ walters_est_fun <- function(data, models, beta_h_formula, beta_s_formula) {
   
   # Grab individual score functions
   p_s_score <- grab_psiFUN(models$p_s, data)
-  r_score_raw <- grab_psiFUN(models$r, data)
-  r_score <- function(beta_r) r_score_raw(beta_r) * is_internal * summary(models$r)$dispersion
+  r_score <- function(beta_r, wcls_s_causal_effect) {
+    (wcls_s_causal_effect -  c(X_beta_r %*% beta_r)) * c(X_beta_r) * is_internal
+  }
   
   # Create full score function
   score_fun <- function(theta) {
@@ -41,16 +42,16 @@ walters_est_fun <- function(data, models, beta_h_formula, beta_s_formula) {
     
     # WCLS score
     p_s <- c(1 / (1 + exp(-(X_alpha_s %*% alpha_s))))  # Assume logit link
-    X_beta_s <- (a - p_s) * X_beta_s_raw
     p_s_a <- a*p_s + (1-a)*(1-p_s)
     w <- p_s_a / p_h_a
-    wcls_resid <- c(y - X_beta_h %*% beta_h - X_beta_s %*% beta_s)
+    wcls_s_causal_effect <- c(X_beta_s_raw %*% beta_s)
+    wcls_resid <- c(y - X_beta_h %*% beta_h - (a - p_s) * wcls_s_causal_effect)
     wcls_weighted_resid <- w * wcls_resid
     score[pos_beta_h] <- wcls_weighted_resid * c(X_beta_h)
-    score[pos_beta_s] <- wcls_weighted_resid * c(X_beta_s)
+    score[pos_beta_s] <- wcls_weighted_resid * (a - p_s) * c(X_beta_s_raw)
     
     # beta_r score
-    score[pos_beta_r] <- r_score(beta_r)
+    score[pos_beta_r] <- r_score(beta_r, wcls_s_causal_effect)
     
     score
   }
