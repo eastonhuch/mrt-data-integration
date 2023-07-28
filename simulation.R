@@ -13,32 +13,14 @@ require(abind)
 beta_r_true <- c(-5, -1, 0.9, 0.3)
 names(beta_r_true) <- c("A - p(A=1 | s)", "[A - p(A=1 | s)] * x1", "[A - p(A=1 | s)] * x1^2", "[A - p(A=1 | s)] * x1^3")
 
-# Function for applying WCLS to data
-apply_wcls <- function(data) {
-  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
-  data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
-  data$p_s_hat_a <- data$a * data$p_s_hat + (1 - data$a) * (1 - data$p_s_hat)
-  data$w <- data$p_s_hat_a / data$p_h_a
-  data$a_centered <- data$a - data$p_s_hat
-  
-  # TODO: Update this method to account for uncertainty in p_mod
-  model_wcls <- geeglm(
-    y ~ x1 + x2 + x3 + I(a_centered) + I(a_centered * x1) + I(a_centered * x1^2) + + I(a_centered * x1^3),
-    data=data, weights=w, id=user_id
-  )
-  model_summary_wcls <- summary(model_wcls)
-  vcov_wcls <- vcov(model_wcls)
-  wcls_beta_r_idx <- seq(5, 8)
-  beta_r_wcls <- model_wcls$coefficients[wcls_beta_r_idx]
-  se_wcls <- sqrt(diag(vcov_wcls))[wcls_beta_r_idx]
-  covered_wcls <- (
-    (beta_r_true >= beta_r_wcls - 1.96 * se_wcls) & 
-      (beta_r_true <= beta_r_wcls + 1.96 * se_wcls))
-  
+process_results <- function(model) {
+  covered <- (
+    (beta_r_true >= model$beta_r - 1.96 * model$se_beta_r) & 
+      (beta_r_true <= model$beta_r + 1.96 * model$se_beta_r))
   results <- cbind(
-    estimate=beta_r_wcls,
-    se=se_wcls,
-    covered=covered_wcls
+    estimate=model$beta_r,
+    se=model$se_beta_r,
+    covered=covered
   )
   results
 }
@@ -49,21 +31,16 @@ simulate_one <- function(n_internal, n_external) {
   
   # Walter method
   model_walter <- walters_method(dat)
-  covered_walter <- (
-    (beta_r_true >= model_walter$beta_r - 1.96 * model_walter$se_beta_r) & 
-    (beta_r_true <= model_walter$beta_r + 1.96 * model_walter$se_beta_r))
-  results_walter <- cbind(
-    estimate=model_walter$beta_r,
-    se=model_walter$se_beta_r,
-    covered=covered_walter
-  )
+  results_walter <- process_results(model_walter)
   
   # Internal only
   dat_internal <- dat[dat$is_internal, ]
-  results_internal <- apply_wcls(dat_internal)
+  model_internal <- wcls(dat_internal)
+  results_internal <- process_results(model_internal)
   
   # Naive pooling
-  results_naive <- apply_wcls(dat)
+  model_naive <- wcls(dat)
+  results_naive <- process_results(model_naive)
   
   # Bind results together
   results <- abind(
