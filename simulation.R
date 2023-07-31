@@ -141,3 +141,7 @@ View(create_pretty_table(results_100))
 # 200 external data points
 results_200 <- simulate_all(100, 200, n_replications)
 View(create_pretty_table(results_200))
+
+# 1,000 for both
+results_1000 <- simulate_all(1000, 1000, n_replications)
+View(create_pretty_table(results_1000))
