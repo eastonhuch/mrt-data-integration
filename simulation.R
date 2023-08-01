@@ -138,9 +138,10 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 100
-sample_sizes <- c(25, 100, 400, 1600)
+n_replications <- 400
+sample_sizes <- c(25, 100, 400, 1600, 6400)
 result_df <- NULL
+results_100_100 <- NULL
 for (n_internal in sample_sizes) {
   for (n_external in sample_sizes) {
     results_i <- simulate_all(n_internal, n_external, n_replications)
@@ -150,42 +151,49 @@ for (n_internal in sample_sizes) {
     } else {
       result_df <- rbind(result_df, result_df_i)
     }
+    
+    if ((n_internal == 100) && (n_external == 100)) {
+      results_100_100 <- results_i
+    }
   }
 }
 colnames(result_df) <- colnames(result_df_i)
 
 # Checkpoint result dataframe
-# result_df_file <- "~/Documents/research/mrt-data-integration/simulation_results.csv"
-# write.csv(result_df, file=result_df_file, row.names=FALSE)
-# result_df <- read.csv(result_df_file)
+result_df_file <- "~/Documents/research/mrt-data-integration/simulation_results.csv"
+write.csv(result_df, file=result_df_file, row.names=FALSE)
+result_df <- read.csv(result_df_file)
+colnames(result_df) <- colnames(result_df_i)
 
 # Plot effect of increasing external sample size
 unbiased_method_names <- method_names[method_names != "WCLS, Pooled"]
-result_df_100_internal <- result_df %>% filter(`Internal Sample Size` == 100)
-pdf(file="Documents/research/mrt-data-integration/internal_sample_size_efficiency.pdf",
+result_df_25_internal <- result_df %>% filter(`Internal Sample Size` == 25)
+pdf(file="Documents/research/mrt-data-integration/external_sample_size_efficiency.pdf",
     width=8, height=2.7)
-par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1.1, cex.lab=1.2)
+par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
 subplot_names <- c("(a) Intercept", "(b) Linear Term", "(c) Quadratic Term", "(d) Cubic Term")
 for (coef_counter in seq_along(beta_r_true)) {
   coef_name <- names(beta_r_true)[coef_counter]
-  plot(NULL, type="n", xlim=c(20, 1700), ylim=c(0.05, 1.1), log="xy", xaxt="n",
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-0.3, 1.35), log="x", xaxt="n",
        xlab="External Sample Size", ylab="", main=subplot_names[coef_counter])
+  abline(h=0, col="gray", lty=2)
   if (coef_counter == 1) {
     title(ylab="Relative Efficiency", line=2.7)
   }
-  axis(side=1, at=sample_sizes, labels=sample_sizes)
+  axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
+  axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
   if (coef_counter == 1) {
-    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names))
+    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
   }
   method_counter <- 0
   for (method in unbiased_method_names) {
     method_counter <- method_counter + 1
-    result_df_100_internal_i <- result_df_100_internal %>% filter(
+    result_df_25_internal_i <- result_df_25_internal %>% filter(
       Method == method,
       `Coefficient Name` == coef_name) %>% arrange(`External Sample Size`)  
     lines(
-      result_df_100_internal_i$`External Sample Size`,
-      result_df_100_internal_i$`Empirical Relative Efficiency`,
+      result_df_25_internal_i$`External Sample Size`,
+      result_df_25_internal_i$`Empirical Relative Efficiency`,
       type="b", pch=method_counter, col=method_counter
     )
   }
@@ -193,31 +201,67 @@ for (coef_counter in seq_along(beta_r_true)) {
 dev.off()
 
 # Plot effect of increasing internal sample size
-result_df_100_external <- result_df %>% filter(`External Sample Size` == 100)
-pdf(file="Documents/research/mrt-data-integration/external_sample_size_efficiency.pdf",
+result_df_25_external <- result_df %>% filter(`External Sample Size` == 25)
+pdf(file="Documents/research/mrt-data-integration/internal_sample_size_efficiency.pdf",
     width=8, height=2.7)
-par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1.1, cex.lab=1.2)
+par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
 subplot_names <- c("(a) Intercept", "(b) Linear Term", "(c) Quadratic Term", "(d) Cubic Term")
 for (coef_counter in seq_along(beta_r_true)) {
   coef_name <- names(beta_r_true)[coef_counter]
-  plot(NULL, type="n", xlim=c(20, 1700), ylim=c(0.05, 1.1), log="xy", xaxt="n",
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-0.3, 1.35), log="x", xaxt="n",
        xlab="Internal Sample Size", ylab="", main=subplot_names[coef_counter])
+  abline(h=0, col="gray", lty=2)
   if (coef_counter == 1) {
     title(ylab="Relative Efficiency", line=2.7)
   }
-  axis(side=1, at=sample_sizes, labels=sample_sizes)
+  axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
+  axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
   if (coef_counter == 1) {
-    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names))
+    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
   }
   method_counter <- 0
   for (method in unbiased_method_names) {
     method_counter <- method_counter + 1
-    result_df_100_external_i <- result_df_100_external %>% filter(
+    result_df_25_external_i <- result_df_25_external %>% filter(
       Method == method,
       `Coefficient Name` == coef_name) %>% arrange(`Internal Sample Size`)  
     lines(
-      result_df_100_internal_i$`Internal Sample Size`,
-      result_df_100_internal_i$`Empirical Relative Efficiency`,
+      result_df_25_external_i$`Internal Sample Size`,
+      result_df_25_external_i$`Empirical Relative Efficiency`,
+      type="b", pch=method_counter, col=method_counter
+    )
+  }
+}
+dev.off()
+
+# Plot effect of increasing both sample sizes
+result_df_balanced_samples <- result_df %>% filter(`External Sample Size` == `Internal Sample Size`)
+pdf(file="Documents/research/mrt-data-integration/sample_size_efficiency.pdf",
+    width=8, height=2.7)
+par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
+subplot_names <- c("(a) Intercept", "(b) Linear Term", "(c) Quadratic Term", "(d) Cubic Term")
+for (coef_counter in seq_along(beta_r_true)) {
+  coef_name <- names(beta_r_true)[coef_counter]
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-0.3, 1.35), log="x", xaxt="n",
+       xlab="Sample Sizes", ylab="", main=subplot_names[coef_counter])
+  abline(h=0, col="gray", lty=2)
+  if (coef_counter == 1) {
+    title(ylab="Relative Efficiency", line=2.7)
+  }
+  axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
+  axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
+  if (coef_counter == 1) {
+    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
+  }
+  method_counter <- 0
+  for (method in unbiased_method_names) {
+    method_counter <- method_counter + 1
+    result_df_balanced_samples_i <- result_df_balanced_samples %>% filter(
+      Method == method,
+      `Coefficient Name` == coef_name) %>% arrange(`Internal Sample Size`)  
+    lines(
+      result_df_balanced_samples_i$`Internal Sample Size`,
+      result_df_balanced_samples_i$`Empirical Relative Efficiency`,
       type="b", pch=method_counter, col=method_counter
     )
   }
