@@ -1,19 +1,19 @@
-walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
+walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula) {
   # Extract some columns
-  y <- data$y
-  p_h_a <- data$p_h_a
-  a <- data$a
-  a_centered <- data$a_centered
-  is_internal <- data$is_internal
-  x2_internal <- data$x2[is_internal]
+  y <- data_pooled$y
+  p_h_a <- data_pooled$p_h_a
+  a <- data_pooled$a
+  a_centered <- data_pooled$a_centered
+  is_internal <- data_pooled$is_internal
+  x2_internal <- data_pooled$x2[is_internal]
   
   # Construct design matrices
-  X_alpha_s <- model.matrix(formula(models$p_s), data=data)
-  X_beta_h <- model.matrix(beta_h_formula, data=data)
-  X_beta_s <- model.matrix(beta_s_formula, data=data)
+  X_alpha_s <- model.matrix(formula(models$p_s), data=data_pooled)
+  X_beta_h <- model.matrix(beta_h_formula, data=data_pooled)
+  X_beta_s <- model.matrix(beta_s_formula, data=data_pooled)
   X_beta_s_raw <- X_beta_s / a_centered
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
-  X_beta_r_internal <- model.matrix(formula(models$r), data=data[data$is_internal,])
+  X_beta_r_internal <- model.matrix(formula(models$r), data=data_internal)
   
   # Store dimensions
   n <- nrow(X_beta_h)
@@ -72,9 +72,9 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% p_s_deriv
 
   # beta_r score
-  scores[is_internal, pos_beta_r] <- (data$wcls_s_causal_effects[data$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
+  scores[is_internal, pos_beta_r] <- (data_pooled$wcls_s_causal_effects[data_pooled$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
-  hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data$is_internal,]
+  hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
   
   # Assemble sandwich
   meat <- crossprod(scores)
@@ -87,18 +87,26 @@ walters_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   )
 }
 
-walters_method <- function(data) {
+walters_method <- function(data, internal_only=FALSE) {
+  # Create data_pooled, data_internal
+  if (internal_only) {
+    data_pooled <- data[data$is_internal,]
+  } else {
+    data_pooled <- data
+  }
+  
+  # True coefficient vectors
   beta_s_true <- c(1, 2, -3)
   beta_r_true <- c(-5, -1, 0.9, 0.3)
   
   # Get point estimates
   # Propensity score model
-  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_s_mod <- glm(a ~ 1, data=data_pooled, family=binomial())
   alpha_s <- coef(p_s_mod)
-  data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
-  data$a_centered <- data$a - data$p_s_hat
-  data$p_s_hat_a <- data$a * data$p_s_hat + (1 - data$a) * (1 - data$p_s_hat)
-  data$w <- data$p_s_hat_a / data$p_h_a
+  data_pooled$p_s_hat <- predict(p_s_mod, newdata=data_pooled, type="response")
+  data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
+  data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat)
+  data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
   
   # WCLS
   beta_h_formula <- y ~ x1 + x2 + x3
@@ -106,16 +114,17 @@ walters_method <- function(data) {
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
-  wcls_mod <- lm(wcls_formula, data=data, weights=w)
+  wcls_mod <- lm(wcls_formula, data=data_pooled, weights=w)
   last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
-  data$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data) %*% beta_s) / data$a_centered
+  data_pooled$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data_pooled) %*% beta_s) / data_pooled$a_centered
   d_s <- length(beta_s)
   
   # beta_r
+  data_internal <- data_pooled[data_pooled$is_internal,]
   r_formula <- wcls_s_causal_effects ~ x1 + I(x1^2) + I(x1^3)
-  r_mod <- glm(r_formula, data=data[data$is_internal,])
+  r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
 
   # Models list
@@ -135,7 +144,7 @@ walters_method <- function(data) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- walters_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich_list <- walters_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula)
   sandwich <- sandwich_list$sandwich
   pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
