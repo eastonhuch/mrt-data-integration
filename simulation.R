@@ -9,10 +9,14 @@ source("~/Documents/research/mrt-data-integration/wcls.R")
 require(geepack)
 require(abind)
 require(tidyverse)
+require(ggplot2)
+require(forcats)
+require(xtable)
+require(scales)
 
 # True value of beta_r
 beta_r_true <- c(-5, -1, 0.9, 0.3)
-names(beta_r_true) <- c("A - p(A=1 | s)", "[A - p(A=1 | s)] * x1", "[A - p(A=1 | s)] * x1^2", "[A - p(A=1 | s)] * x1^3")
+names(beta_r_true) <- c("Intercept", "Linear", "Quadratic", "Cubic")
 method_names <- c("P-WCLS, Pooled", "P-WCLS, Internal Only", "WCLS, Pooled", "WCLS, Internal Only")
 
 process_results <- function(model) {
@@ -138,26 +142,26 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 400
-sample_sizes <- c(25, 100, 400, 1600, 6400)
-result_df <- NULL
-results_100_100 <- NULL
-for (n_internal in sample_sizes) {
-  for (n_external in sample_sizes) {
-    results_i <- simulate_all(n_internal, n_external, n_replications)
-    result_df_i <- create_pretty_table(results_i)
-    if (is.null(result_df)) {
-      result_df <- result_df_i
-    } else {
-      result_df <- rbind(result_df, result_df_i)
-    }
-    
-    if ((n_internal == 100) && (n_external == 100)) {
-      results_100_100 <- results_i
-    }
-  }
-}
-colnames(result_df) <- colnames(result_df_i)
+# n_replications <- 400
+# sample_sizes <- c(25, 100, 400, 1600, 6400)
+# result_df <- NULL
+# results_25_25 <- NULL
+# for (n_internal in sample_sizes) {
+#   for (n_external in sample_sizes) {
+#     results_i <- simulate_all(n_internal, n_external, n_replications)
+#     result_df_i <- create_pretty_table(results_i)
+#     if (is.null(result_df)) {
+#       result_df <- result_df_i
+#     } else {
+#       result_df <- rbind(result_df, result_df_i)
+#     }
+#     
+#     if ((n_internal == 25) && (n_external == 25)) {
+#       results_25_25 <- results_i
+#     }
+#   }
+# }
+# colnames(result_df) <- colnames(result_df_i)
 
 # Checkpoint result dataframe
 result_df_file <- "~/Documents/research/mrt-data-integration/simulation_results.csv"
@@ -165,25 +169,35 @@ write.csv(result_df, file=result_df_file, row.names=FALSE)
 result_df <- read.csv(result_df_file)
 colnames(result_df) <- colnames(result_df_i)
 
+# Checkpoint results_25_25
+results_25_25_file <- "~/Documents/research/mrt-data-integration/results_25_25.RData"
+save(results_25_25, file=results_25_25_file)
+load(results_25_25_file)
+
 # Plot effect of increasing external sample size
 unbiased_method_names <- method_names[method_names != "WCLS, Pooled"]
 result_df_25_internal <- result_df %>% filter(`Internal Sample Size` == 25)
-pdf(file="Documents/research/mrt-data-integration/external_sample_size_efficiency.pdf",
-    width=8, height=2.7)
-par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
-subplot_names <- c("(a) Intercept", "(b) Linear Term", "(c) Quadratic Term", "(d) Cubic Term")
+pdf(file="~/Documents/research/mrt-data-integration/sample_size_se.pdf",
+    width=8, height=5.4)
+par(mfrow=c(2, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
+subplot_names <- names(beta_r_true)
 for (coef_counter in seq_along(beta_r_true)) {
   coef_name <- names(beta_r_true)[coef_counter]
-  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-0.3, 1.35), log="x", xaxt="n",
+  max_se <- result_df_25_internal %>% filter(
+    Method == method,
+    `Coefficient Name` == coef_name) %>%
+    pull(`Empirical Standard Error`) %>%
+    max()
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-(0.3 * max_se), 1.2*max_se), log="x", xaxt="n",
        xlab="External Sample Size", ylab="", main=subplot_names[coef_counter])
   abline(h=0, col="gray", lty=2)
   if (coef_counter == 1) {
-    title(ylab="Relative Efficiency", line=2.7)
+    title(ylab="Standard Error", line=2.7)
   }
   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
   axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
   if (coef_counter == 1) {
-    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
+    legend("bottomleft", legend=unbiased_method_names_r, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
   }
   method_counter <- 0
   for (method in unbiased_method_names) {
@@ -193,32 +207,36 @@ for (coef_counter in seq_along(beta_r_true)) {
       `Coefficient Name` == coef_name) %>% arrange(`External Sample Size`)  
     lines(
       result_df_25_internal_i$`External Sample Size`,
-      result_df_25_internal_i$`Empirical Relative Efficiency`,
+      result_df_25_internal_i$`Empirical Standard Error`,
       type="b", pch=method_counter, col=method_counter
     )
   }
 }
-dev.off()
+#dev.off()
 
 # Plot effect of increasing internal sample size
 result_df_25_external <- result_df %>% filter(`External Sample Size` == 25)
-pdf(file="Documents/research/mrt-data-integration/internal_sample_size_efficiency.pdf",
-    width=8, height=2.7)
-par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
+#pdf(file="Documents/research/mrt-data-integration/internal_sample_size_se.pdf", width=8, height=2.7)
+#par(mfrow=c(1, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
 subplot_names <- c("(a) Intercept", "(b) Linear Term", "(c) Quadratic Term", "(d) Cubic Term")
 for (coef_counter in seq_along(beta_r_true)) {
   coef_name <- names(beta_r_true)[coef_counter]
-  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-0.3, 1.35), log="x", xaxt="n",
-       xlab="Internal Sample Size", ylab="", main=subplot_names[coef_counter])
+  max_se <- result_df_25_external %>% filter(
+    Method == method,
+    `Coefficient Name` == coef_name) %>%
+    pull(`Empirical Standard Error`) %>%
+    max()
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-(0.3 * max_se), 1.2*max_se), log="x", xaxt="n",
+       xlab="Internal Sample Size", ylab="")#main=subplot_names[coef_counter])
   abline(h=0, col="gray", lty=2)
   if (coef_counter == 1) {
-    title(ylab="Relative Efficiency", line=2.7)
+    title(ylab="Standard Error", line=2.7)
   }
   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
   axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
-  if (coef_counter == 1) {
-    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
-  }
+  # if (coef_counter == 1) {
+  #   legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
+  # }
   method_counter <- 0
   for (method in unbiased_method_names) {
     method_counter <- method_counter + 1
@@ -227,7 +245,7 @@ for (coef_counter in seq_along(beta_r_true)) {
       `Coefficient Name` == coef_name) %>% arrange(`Internal Sample Size`)  
     lines(
       result_df_25_external_i$`Internal Sample Size`,
-      result_df_25_external_i$`Empirical Relative Efficiency`,
+      result_df_25_external_i$`Empirical Standard Error`,
       type="b", pch=method_counter, col=method_counter
     )
   }
@@ -267,3 +285,77 @@ for (coef_counter in seq_along(beta_r_true)) {
   }
 }
 dev.off()
+
+# Add grouped side-by-side boxplots
+estimates_25_25 <- results_25_25$results[,"estimate",,]
+readable_coef_names <- c("Intercept", "Linear", "Quadratic", "Cubic")
+adjust_method_names <- function(x) {
+  method_names <- c("P-WCLS, Pooled", "P-WCLS, Internal", "WCLS, Pooled", "WCLS, Internal")
+  names(method_names) <- c("P-WCLS, Pooled", "P-WCLS, Internal Only", "WCLS, Pooled", "WCLS, Internal Only")
+  method_names[x]
+}
+dimnames(estimates_25_25)[[1]] <- readable_coef_names
+estimates_25_25_df <- data.frame()
+for (coef_name in readable_coef_names) {
+  for (method in method_names) {
+    estimates_25_25_df_i <- data.frame(Estimate=estimates_25_25[coef_name, method,])
+    estimates_25_25_df_i["Method"] <- method
+    estimates_25_25_df_i["MethodNumber"] <- which.max(method_names == method)
+    estimates_25_25_df_i["Coefficient"] <- coef_name
+    estimates_25_25_df_i["CoefficientNumber"] <- which.max(readable_coef_names == coef_name)
+    estimates_25_25_df <- rbind(
+      estimates_25_25_df,
+      estimates_25_25_df_i
+    )
+  }
+}
+boxplots_25_25_df <- estimates_25_25_df %>% mutate(
+  Method = adjust_method_names(Method)
+) %>% mutate(
+  Method = fct_reorder(Method, MethodNumber),
+  Coefficient = fct_reorder(Coefficient, CoefficientNumber)
+)
+pdf("~/Documents/research/mrt-data-integration/estimates_25_25.pdf", width=10, height=3)
+ggplot(boxplots_25_25_df, aes(x=Coefficient, y=Estimate, fill=Method)) + 
+  geom_boxplot()
+dev.off()
+
+# Tables
+print_exact_number_nicely <- function(x, digits=1) {
+  x_rounded <- round(x)
+  if (abs(x - x_rounded) < 1e-6) {
+    result <- as.character(x_rounded)
+  } else {
+    result <- as.character(round(x, 1))
+  }
+  result
+}
+
+
+result_table <- result_df %>% filter(
+    `Internal Sample Size` == 100,
+    `External Sample Size` == 100,
+  ) %>% mutate(
+    `Coefficient Name` = sapply(`Coefficient Name`, function(x_i) paste0("$", x_i, "$")),
+    Method = adjust_method_names(Method),
+    `True Value` = sapply(`True Value`, print_exact_number_nicely),
+    `Relative Efficiency` = label_percent(accuracy=0.1)(`Empirical Relative Efficiency`),
+    `Coverage` = label_percent(accuracy=0.1)(`Coverage (95% Nominal)`),
+    `Avg Estimate` = round(`Avg Estimate`, 2),
+    `rMSE` = round(`rMSE`, 2),
+  ) %>% select(
+    `True Value`,
+    Method,
+    `Avg Estimate`,
+    `Relative Efficiency`,
+    `rMSE`,
+    `Coverage`
+  ) %>% xtable(
+    label="integration:tab:simulation_results",
+    caption="Results from the simulation with 100 individuals in both the internal and external studies. As expected, all methods except WCLS, Pooled generate approximately unbiased estimates. P-WCLS, Pooled is the most efficient estimator for all coefficients except the intercept. All methods except WCLS, Pooled achieve near-nominal coverage, with the two versions of P-WCLS outperforming WCLS in most comparisons."
+  )
+print(
+  result_table,
+  sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),
+  include.rownames = FALSE
+)  
