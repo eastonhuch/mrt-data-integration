@@ -18,7 +18,7 @@ require(stringr)
 beta_r_true <- c(-5, -1, 0.9, 0.3)
 coef_names <- c("Intercept", "Linear", "Quadratic", "Cubic")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal")
+method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal")
 
 process_results <- function(model) {
   covered <- (
@@ -40,6 +40,10 @@ simulate_one <- function(n_internal, n_external) {
   model_pwcls_pooled <- walters_method(dat)
   results_pwcls_pooled <- process_results(model_pwcls_pooled)
   
+  # P-WCLS-Pooled-OBS
+  model_pwcls_pooled_obs <- walters_method(dat, observational=TRUE)
+  results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
+
   # P-WCLS-Internal
   model_pwcls_internal <- walters_method(dat, internal_only=TRUE)
   results_pwcls_internal <- process_results(model_pwcls_internal)
@@ -56,6 +60,7 @@ simulate_one <- function(n_internal, n_external) {
   # Bind results together
   results <- abind(
     results_pwcls_pooled,
+    results_pwcls_pooled_obs,
     results_pwcls_internal,
     results_wcls_pooled,
     results_wcls_internal,
@@ -144,7 +149,7 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 n_replications <- 400
-sample_sizes <- c(25, 100, 400, 1600, 6400)
+sample_sizes <- c(25, 100) #, 400, 1600, 6400)
 result_df <- NULL
 results_25_25 <- NULL
 for (n_internal in sample_sizes) {
@@ -309,7 +314,6 @@ dev.off()
 
 # Plot confidence intervals for first two methods
 estimates_100_100 <- results_100_100$results[,"estimate",,]
-dimnames(estimates_100_100)
 
 pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
     width=6.5, height=2.5)
@@ -325,7 +329,8 @@ plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 125),
      xlab=expression(X[1]), ylab="Causal Effect",
      main="(b) 95% CIs")
 dash_lty <- 2
-for (method_number in c(1, 2)) {
+x1_plot_method_numbers <- c(1, 3)
+for (method_number in x1_plot_method_numbers) {
   method_name <- method_names[method_number]
   method_estimates <- estimates_100_100[,method_name,]
   method_fitted_values <- x1_design_matrix %*% method_estimates
@@ -334,19 +339,19 @@ for (method_number in c(1, 2)) {
   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.025)), col=method_number, lty=dash_lty)
   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
 }
-legend("topleft", legend=method_names[1:2], lty=1, col=1:2, cex=0.85)
+legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
 
 plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
      xlab=expression(X[1]), ylab="Standard Error",
      main="(c) SE Comparison")
-for (method_number in c(1, 2)) {
+for (method_number in x1_plot_method_numbers) {
   method_name <- method_names[method_number]
   method_estimates <- estimates_100_100[,method_name,]
   method_fitted_values <- x1_design_matrix %*% method_estimates
   method_ses <- apply(method_fitted_values, MARGIN=1, sd)
   lines(x1_values, method_ses, col=method_number)
 }
-legend("topleft", legend=method_names[1:2], lty=1, col=1:2, cex=0.85)
+legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
 
 dev.off()
 
