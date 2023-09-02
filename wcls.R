@@ -66,7 +66,14 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w)) %*% p_r_deriv
 
   # Assemble sandwich
-  meat <- crossprod(scores)
+  n_users <- max(dat$user_id)
+  t_max <- floor(n / n_users)
+  scores_agg <- apply(
+    aperm(
+      array(scores, dim = c(t_max, n_users, d)),
+      c(2,1,3)),
+    MARGIN=c(1,3), FUN=sum)
+  meat <- crossprod(scores_agg)
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
   list(

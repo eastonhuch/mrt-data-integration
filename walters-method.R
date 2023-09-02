@@ -77,7 +77,14 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
   
   # Assemble sandwich
-  meat <- crossprod(scores)
+  n_users <- max(dat$user_id)
+  t_max <- floor(n / n_users)
+  scores_agg <- apply(
+    aperm(
+      array(scores, dim = c(t_max, n_users, d)),
+      c(2,1,3)),
+    MARGIN=c(1,3), FUN=sum)
+  meat <- crossprod(scores_agg)
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
   list(

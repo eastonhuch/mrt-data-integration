@@ -71,7 +71,14 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   scores[is_internal, pos_gamma_x2] <- (x2_internal - c(X_gamma_x2_internal %*% gamma_x2)) * X_gamma_x2_internal
   hessian[pos_gamma_x2, pos_gamma_x2] <- crossprod(X_gamma_x2_internal)
   
-  meat <- crossprod(scores)
+  n_users <- max(dat$user_id)
+  t_max <- floor(n / n_users)
+  scores_agg <- apply(
+    aperm(
+      array(scores, dim = c(t_max, n_users, d)),
+      c(2,1,3)),
+    MARGIN=c(1,3), FUN=sum)
+  meat <- crossprod(scores_agg)
   half_sandwich <- solve(hessian, t(chol(meat)))
   sandwich <- tcrossprod(half_sandwich)
   list(

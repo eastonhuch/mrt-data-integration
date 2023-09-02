@@ -147,29 +147,30 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-# n_replications <- 400
+n_replications <- 400
+sample_sizes <- c(25, 100)
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
-# result_df <- NULL
-# results_25_25 <- NULL
-# for (n_internal in sample_sizes) {
-#   for (n_external in sample_sizes) {
-#     results_i <- simulate_all(n_internal, n_external, n_replications)
-#     result_df_i <- create_pretty_table(results_i)
-#     if (is.null(result_df)) {
-#       result_df <- result_df_i
-#     } else {
-#       result_df <- rbind(result_df, result_df_i)
-#     }
-#     
-#     if ((n_internal == 25) && (n_external == 25)) {
-#       results_25_25 <- results_i
-#     }
-#   }
-# }
-# colnames(result_df) <- colnames(result_df_i)
+result_df <- NULL
+results_25_25 <- NULL
+for (n_internal in sample_sizes) {
+  for (n_external in sample_sizes) {
+    results_i <- simulate_all(n_internal, n_external, n_replications)
+    result_df_i <- create_pretty_table(results_i)
+    if (is.null(result_df)) {
+      result_df <- result_df_i
+    } else {
+      result_df <- rbind(result_df, result_df_i)
+    }
+
+    if ((n_internal == 25) && (n_external == 25)) {
+      results_25_25 <- results_i
+    }
+  }
+}
+colnames(result_df) <- colnames(result_df_i)
 
 # For recreating just results_25_25
-results_25_25 <- simulate_all(25, 25, n_replications)
+# results_25_25 <- simulate_all(25, 25, n_replications)
 
 # Checkpoint result dataframe
 result_df_file <- "~/Documents/research/mrt-data-integration/simulation_results.csv"
@@ -204,7 +205,7 @@ for (coef_counter in seq_along(beta_r_true)) {
   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
   axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
   if (coef_counter == 1) {
-    legend("bottomleft", legend=unbiased_method_names_r, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
+    legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
   }
   method_counter <- 0
   for (method in unbiased_method_names) {
@@ -412,4 +413,3 @@ xtable_results <- xtable(
   str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Quadratic\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Quadratic}") %>%
   str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Cubic\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Cubic}")
 cat(xtable_results)
-
