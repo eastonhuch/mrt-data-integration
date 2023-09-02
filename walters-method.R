@@ -77,7 +77,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
   
   # Assemble sandwich
-  n_users <- max(dat$user_id)
+  n_users <- max(data_pooled$user_id)
   t_max <- floor(n / n_users)
   scores_agg <- apply(
     aperm(

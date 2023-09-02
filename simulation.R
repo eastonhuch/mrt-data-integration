@@ -2,11 +2,7 @@
 # "Data integration methods for micro-randomized trials"
 
 set.seed(1)
-require(Rcpp)
-require(RcppArmadillo)
-sourceCpp("~/Documents/research/mrt-data-integration/fast-meat.cpp")
 source("~/Documents/research/mrt-data-integration/generate_data.R")
-source("~/Documents/research/mrt-data-integration/eastons-method.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
 require(geepack)
@@ -148,8 +144,7 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 n_replications <- 400
-sample_sizes <- c(25, 100)
-# sample_sizes <- c(25, 100, 400, 1600, 6400)
+sample_sizes <- c(25, 100, 400, 1600, 6400)
 result_df <- NULL
 results_25_25 <- NULL
 for (n_internal in sample_sizes) {
@@ -164,6 +159,14 @@ for (n_internal in sample_sizes) {
 
     if ((n_internal == 25) && (n_external == 25)) {
       results_25_25 <- results_i
+    }
+    
+    if ((n_internal == 100) && (n_external == 100)) {
+      results_100_100 <- results_i
+    }
+    
+    if ((n_internal == 400) && (n_external == 400)) {
+      results_400_400 <- results_i
     }
   }
 }
@@ -182,6 +185,15 @@ colnames(result_df) <- colnames(result_df_i)
 results_25_25_file <- "~/Documents/research/mrt-data-integration/results_25_25.RData"
 save(results_25_25, file=results_25_25_file)
 load(results_25_25_file)
+
+results_100_100_file <- "~/Documents/research/mrt-data-integration/results_100_100.RData"
+save(results_100_100, file=results_100_100_file)
+load(results_100_100_file)
+
+results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
+save(results_400_400, file=results_400_400_file)
+load(results_400_400_file)
+
 
 # Plot effect of increasing external sample size
 unbiased_method_names <- method_names[method_names != "WCLS-Pooled"]
@@ -295,7 +307,50 @@ ggplot() +
     linewidth=boxplot_linewidth)
 dev.off()
 
-# Tables
+# Plot confidence intervals for first two methods
+estimates_100_100 <- results_100_100$results[,"estimate",,]
+dimnames(estimates_100_100)
+
+pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
+    width=6.5, height=2.5)
+par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
+
+dat <- generate_data(n_internal=100000, n_external=100000)
+max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
+x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
+hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
+
+x1_design_matrix <- cbind(1, x1_values, x1_values^2, x1_values^3)
+plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 125),
+     xlab=expression(X[1]), ylab="Causal Effect",
+     main="(b) 95% CIs")
+dash_lty <- 2
+for (method_number in c(1, 2)) {
+  method_name <- method_names[method_number]
+  method_estimates <- estimates_100_100[,method_name,]
+  method_fitted_values <- x1_design_matrix %*% method_estimates
+  mean_method_fitted_values <- rowMeans(method_fitted_values)
+  lines(x1_values, mean_method_fitted_values, col=method_number)
+  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.025)), col=method_number, lty=dash_lty)
+  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
+}
+legend("topleft", legend=method_names[1:2], lty=1, col=1:2, cex=0.85)
+
+plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
+     xlab=expression(X[1]), ylab="Standard Error",
+     main="(c) SE Comparison")
+for (method_number in c(1, 2)) {
+  method_name <- method_names[method_number]
+  method_estimates <- estimates_100_100[,method_name,]
+  method_fitted_values <- x1_design_matrix %*% method_estimates
+  method_ses <- apply(method_fitted_values, MARGIN=1, sd)
+  lines(x1_values, method_ses, col=method_number)
+}
+legend("topleft", legend=method_names[1:2], lty=1, col=1:2, cex=0.85)
+
+dev.off()
+
+# Table
 print_exact_number_nicely <- function(x, digits=1) {
   x_rounded <- round(x)
   if (abs(x - x_rounded) < 1e-6) {

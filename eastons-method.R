@@ -71,7 +71,7 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   scores[is_internal, pos_gamma_x2] <- (x2_internal - c(X_gamma_x2_internal %*% gamma_x2)) * X_gamma_x2_internal
   hessian[pos_gamma_x2, pos_gamma_x2] <- crossprod(X_gamma_x2_internal)
   
-  n_users <- max(dat$user_id)
+  n_users <- max(data$user_id)
   t_max <- floor(n / n_users)
   scores_agg <- apply(
     aperm(

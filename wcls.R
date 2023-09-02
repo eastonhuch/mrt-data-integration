@@ -66,7 +66,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w)) %*% p_r_deriv
 
   # Assemble sandwich
-  n_users <- max(dat$user_id)
+  n_users <- max(data$user_id)
   t_max <- floor(n / n_users)
   scores_agg <- apply(
     aperm(
