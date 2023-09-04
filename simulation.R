@@ -149,7 +149,7 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 n_replications <- 400
-sample_sizes <- c(25, 100) #, 400, 1600, 6400)
+sample_sizes <- c(25, 100, 400, 1600, 6400)
 result_df <- NULL
 results_25_25 <- NULL
 for (n_internal in sample_sizes) {

@@ -39,7 +39,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   scores[, pos_alpha_r] <- (a - p_r_hat) * X_alpha_r
   sd_p_r_hat <- sqrt(p_r_hat * (1-p_r_hat))
   X_alpha_r_scaled <- sd_p_r_hat * X_alpha_r
-  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled)
+  hessian[pos_alpha_r, pos_alpha_r] <- -crossprod(X_alpha_r_scaled)
   
   # WCLS scores and Hessian
   p_r_hat_a <- a*p_r_hat + (1-a)*(1-p_r_hat)
