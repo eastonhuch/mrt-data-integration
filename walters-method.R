@@ -131,7 +131,7 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
   
   # True coefficient vectors
   beta_s_true <- c(1, 2, -3)
-  beta_r_true <- c(-5, -1, 0.9, 0.3)
+  beta_r_true <- c(-2, 5)
   
   # Get point estimates
   # p_h
@@ -166,7 +166,7 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
   
   # beta_r
   data_internal <- data_pooled[data_pooled$is_internal,]
-  r_formula <- wcls_s_causal_effects ~ x1 + I(x1^2) + I(x1^3)
+  r_formula <- wcls_s_causal_effects ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
 

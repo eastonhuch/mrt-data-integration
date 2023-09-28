@@ -13,12 +13,13 @@ require(forcats)
 require(xtable)
 require(scales)
 require(stringr)
+require(splines)
 
 # True value of beta_r
-beta_r_true <- c(-5, -1, 0.9, 0.3)
-coef_names <- c("Intercept", "Linear", "Quadratic", "Cubic")
+beta_r_true <- c(-2, 5)
+coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal")
+method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS")
 
 process_results <- function(model) {
   covered <- (
@@ -57,6 +58,10 @@ simulate_one <- function(n_internal, n_external) {
   model_wcls_internal <- wcls(dat_internal)
   results_wcls_internal <- process_results(model_wcls_internal)
   
+  # ET-WCLS
+  model_et_wcls <- wcls(dat, tilt=TRUE)
+  results_et_wcls <- process_results(model_et_wcls)
+  
   # Bind results together
   results <- abind(
     results_pwcls_pooled,
@@ -64,6 +69,7 @@ simulate_one <- function(n_internal, n_external) {
     results_pwcls_internal,
     results_wcls_pooled,
     results_wcls_internal,
+    results_et_wcls,
     along=3
   )
   dimnames(results)[[3]] <- method_names
@@ -148,8 +154,8 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 400
-sample_sizes <- c(25, 100, 400, 1600, 6400)
+n_replications <- 10
+sample_sizes <- c(25, 100)#, 400, 1600, 6400)
 result_df <- NULL
 results_25_25 <- NULL
 for (n_internal in sample_sizes) {
@@ -195,9 +201,9 @@ results_100_100_file <- "~/Documents/research/mrt-data-integration/results_100_1
 save(results_100_100, file=results_100_100_file)
 load(results_100_100_file)
 
-results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
-save(results_400_400, file=results_400_400_file)
-load(results_400_400_file)
+# results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
+# save(results_400_400, file=results_400_400_file)
+# load(results_400_400_file)
 
 
 # Plot effect of increasing external sample size
@@ -295,19 +301,11 @@ boxplot_linewidth <- 0.3
 ggplot() + 
   geom_boxplot(data=boxplots_25_25_df, aes(x=Coefficient, y=Estimate, fill=Method)) +
   geom_line(
-    data=data.frame(x=c(0.5, 1.5), y=rep(-5, 2)),
+    data=data.frame(x=c(0.5, 1.5), y=rep(-2, 2)),
     aes(x=x, y=y, group=1),
     linewidth=boxplot_linewidth) +
   geom_line(
-    data=data.frame(x=c(1.5, 2.5), y=rep(-1, 2)),
-    aes(x=x, y=y, group=1),
-    linewidth=boxplot_linewidth) +
-  geom_line(
-    data=data.frame(x=c(2.5, 3.5), y=rep(0.9, 2)),
-    aes(x=x, y=y, group=1),
-    linewidth=boxplot_linewidth) +
-  geom_line(
-    data=data.frame(x=c(3.5, 4.5), y=rep(0.3, 2)),
+    data=data.frame(x=c(1.5, 2.5), y=rep(-5, 2)),
     aes(x=x, y=y, group=1),
     linewidth=boxplot_linewidth)
 dev.off()
@@ -324,7 +322,7 @@ max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
 x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
 hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
 
-x1_design_matrix <- cbind(1, x1_values, x1_values^2, x1_values^3)
+x1_design_matrix <- cbind(1, x1_values)
 plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 125),
      xlab=expression(X[1]), ylab="Causal Effect",
      main="(b) 95% CIs")
@@ -469,7 +467,5 @@ xtable_results <- xtable(
     include.rownames = FALSE) %>%
   str_replace("&  &  \\\\\\\\ \\n", "&  &  \\\\\\\\\n\\\\hline\n") %>% 
   str_replace("\\\\hline\\n &  &  ", " &  &  ") %>%
-  str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Linear\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Linear}") %>%
-  str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Quadratic\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Quadratic}") %>%
-  str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Cubic\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Cubic}")
+  str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Slope}")
 cat(xtable_results)
