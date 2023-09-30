@@ -19,14 +19,10 @@ generate_data <- function(
       nrow=t_max*2, ncol=n
     )[1:t_max,])
   }
-  r <- x1 <- gen_ar1_matrix() #+ 1
-  x2 <- is_internal * (1 - x1 + 2 * rt(n_obs, dof)) + # Could subtract x1 to make this more interesting
-        is_external * (4*rt(n_obs, dof))
-  
-    # x1 +
-    # is_internal * ((2 - 0.3*x1^2 - 0.1*x1^3) + rt(n_obs, dof)) +
-    # is_external * (2 * rt(n_obs, dof))
-  x3 <- -1 + 0.5*x1 + 0.7*x2 + rt(n_obs, dof)
+  r <- x1 <- gen_ar1_matrix()
+  x2 <- is_internal * (1 - x1 + 3 * rt(n_obs, dof)) +
+        is_external * (3 * rt(n_obs, dof))
+  x3 <- -1 + 0.5*x1 - 0.8*x2 + rt(n_obs, dof)
   
   # Plots to check that relationships look right
   if (plot_simulated_data) {
@@ -47,7 +43,7 @@ generate_data <- function(
   
   # Treatments
   p_h <- 1 / (1 + exp(
-    0.8 - 0.7*is_internal + 0.1*x1 - 0.3*x2 + 0.2*x3))
+    0.2 + 0.3*is_internal + 0.05*x1 - 0.03*x2 + 0.06*x3))
   a_logical <- runif(n_obs) < p_h
   a <- as.numeric(a_logical)
   p_h_a <- a*p_h + (1-a)*(1-p_h)
@@ -94,3 +90,11 @@ generate_data <- function(
   dat$ones <- 1
   dat
 }
+
+dat <- generate_data(
+    t_max=20, dof=10, n_internal=100, n_external=100,
+    ar_param=0.5, plot_simulated_data=FALSE)
+plot(dat$x1[dat$is_internal], dat$x2[dat$is_internal])
+points(dat$x1[dat$is_external], dat$x2[dat$is_external], col=2)
+hist(dat$p_h[dat$is_internal], breaks=seq(0, 1, 0.02))
+hist(dat$p_h[!dat$is_internal], breaks=seq(0, 1, 0.02))

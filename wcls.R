@@ -98,13 +98,15 @@ wcls <- function(data, tilt=FALSE) {
   
   if (tilt) {
     tilt_mod <- glm(
-      is_internal ~ ns(x1, df=5) + ns(x2, df=5) + I(x1 * x2) + I(x1 * x2^2) + I(x1^2 * x2) + I(x1^2 * x2^2),
+      is_internal ~ bs(x1, df=3, degree=2) * I(bs(x2, df=3, degree=2)),
       family=binomial(), data=data)
     gamma <- coef(tilt_mod)
     internal_prop <- mean(data$is_internal)
     gamma[1] <- gamma[1] - log(internal_prop / (1-internal_prop))
     X_gamma <- model.matrix(tilt_mod)
     raw_tilt_ratios <- c(exp(X_gamma %*% gamma))
+    # We'll come back to this
+    # internal_weight <- mean(raw_tilt_ratios[data$is_internal])
     data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
   } else {
     data$tilt_ratios <- 1
