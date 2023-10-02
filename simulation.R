@@ -5,6 +5,7 @@ set.seed(1)
 source("~/Documents/research/mrt-data-integration/generate_data.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
+source("~/Documents/research/mrt-data-integration/et-wcls.R")
 require(geepack)
 require(abind)
 require(tidyverse)
@@ -19,7 +20,7 @@ require(splines)
 beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS")
+method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS")
 
 process_results <- function(model) {
   covered <- (
@@ -58,8 +59,12 @@ simulate_one <- function(n_internal, n_external) {
   model_wcls_internal <- wcls(dat_internal)
   results_wcls_internal <- process_results(model_wcls_internal)
   
-  # ET-WCLS
-  model_et_wcls <- wcls(dat, tilt=TRUE)
+  # ET-WCLS-Equal
+  model_et_wcls_equal <- wcls(dat, tilt=TRUE)
+  results_et_wcls_equal <- process_results(model_et_wcls_equal)
+  
+  # ET-WCLS-Equal
+  model_et_wcls <- etwcls(dat)
   results_et_wcls <- process_results(model_et_wcls)
   
   # Bind results together
@@ -69,6 +74,7 @@ simulate_one <- function(n_internal, n_external) {
     results_pwcls_internal,
     results_wcls_pooled,
     results_wcls_internal,
+    results_et_wcls_equal,
     results_et_wcls,
     along=3
   )
@@ -154,7 +160,7 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 100
+n_replications <- 2000
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
 sample_sizes <- c(400)
 result_df <- NULL
