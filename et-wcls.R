@@ -4,7 +4,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   p_h_a <- data$p_h_a
   a <- data$a
   a_centered <- data$a_centered
-
+  
   # Construct design matrices
   X_alpha_r <- model.matrix(formula(models$p_r), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
@@ -56,7 +56,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   X_beta_hr_scaled <- sqrt(w_alt) * X_beta_hr
   GtWG <- crossprod(X_beta_hr_scaled)
   hessian[pos_beta_hr, pos_beta_hr] <- GtWG
-
+  
   p_r_hat_a_deriv <- -(2*a-1) * p_r_hat * (1 - p_r_hat)
   log_p_r_hat_a_deriv <- p_r_hat_a_deriv / p_r_hat_a
   p_r_deriv <- -(1-p_r_hat)
@@ -65,7 +65,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
     t(X_beta_hr * wcls_weighted_resids) %*% log_p_r_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_r_X_beta_r) * wcls_weighted_resids) %*% p_r_deriv +
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
-
+  
   # Assemble sandwich
   n_users <- max(data$user_id)
   t_max <- floor(n / n_users)
@@ -116,8 +116,8 @@ wcls <- function(data, tilt=FALSE) {
   if (is.na(avg_tilt_ratio_external)) avg_tilt_ratio_external <- 1
   data$w_alt <- data$w_and_tilt * 
     (data$is_internal * avg_tilt_ratio_internal +
-      data$is_external * avg_tilt_ratio_external)
-
+       data$is_external * avg_tilt_ratio_external)
+  
   # WCLS
   beta_h_formula <- y ~ x1 + x2 + x3
   beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)

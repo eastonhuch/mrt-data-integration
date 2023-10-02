@@ -61,7 +61,7 @@ generate_data <- function(
   y <- 4 + 2*x1- 1.5*x1*x2 + 0.4*x3^3 + a*treatment_effects + epsilon
   
   # Marginal treatment effects
-  marginal_treatment_effects <- -5 - x1 + 0.9*x1^2 + 0.3*x1^3
+  marginal_treatment_effects <- -2 + 5* x1
   if (plot_simulated_data) {
     plot(r[is_external], treatment_effects[is_external], col=green50, cex=0.5,
       xlab="R", ylab="Treatment Effect", xlim=range(r), ylim=range(treatment_effects))
