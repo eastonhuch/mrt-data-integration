@@ -46,7 +46,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   scores[, pos_alpha_r] <- (a - p_r_hat) * X_alpha_r
   sd_p_r_hat <- sqrt(p_r_hat * (1-p_r_hat))
   X_alpha_r_scaled <- sd_p_r_hat * X_alpha_r
-  hessian[pos_alpha_r, pos_alpha_r] <- -crossprod(X_alpha_r_scaled)
+  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled) # Should this be negative?
   
   # Tilt scores and Hessian
   prop_internal <- mean(is_internal)
@@ -55,7 +55,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   p_delta <- p_delta_num / (1 + p_delta_num)
   scores[, pos_delta] <- (is_internal - p_delta) * X_delta
   X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-  hessian[pos_delta, pos_delta] <- -crossprod(X_delta_weighted)
+  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
   
   # WCLS scores and Hessian
   p_r_hat_a <- data$p_r_hat_a
@@ -172,7 +172,6 @@ etwcls <- function(data) {
   Lambda_horiz_sum <- Lambda[first_half,] + Lambda[second_half,]
   var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
   
-  # These are wrong
   se_beta_r_pooled <- sqrt(diag(var_beta_r_pooled))
   beta_r_pooled_error <- beta_r_pooled - beta_r_true
   beta_r_pooled_z_scores <- beta_r_pooled_error / se_beta_r_pooled

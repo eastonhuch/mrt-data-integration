@@ -1,7 +1,8 @@
 # Simulation study for
 # "Data integration methods for micro-randomized trials"
 
-set.seed(1)
+random_seed <- 777 # Other seeds are set within function simulate_all()
+set.seed(random_seed)
 source("~/Documents/research/mrt-data-integration/generate_data.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
@@ -62,8 +63,8 @@ simulate_one <- function(n_internal, n_external) {
   # ET-WCLS-Equal
   model_et_wcls_equal <- wcls(dat, tilt=TRUE)
   results_et_wcls_equal <- process_results(model_et_wcls_equal)
-  
-  # ET-WCLS-Equal
+
+  # ET-WCLS
   model_et_wcls <- etwcls(dat)
   results_et_wcls <- process_results(model_et_wcls)
   
@@ -85,7 +86,7 @@ simulate_one <- function(n_internal, n_external) {
 # Run simulation
 simulate_all <- function(n_internal, n_external, n_replications) {
   results <- replicate(n_replications, simulate_one(n_internal=n_internal, n_external=n_external))
-  
+
   # Process results
   coverage <- apply(results[,"covered",,], MARGIN=c(1, 2), FUN=mean)
   avg_estimate <- apply(results[,"estimate",,], MARGIN=c(1, 2), FUN=mean)
@@ -160,7 +161,7 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 2000
+n_replications <- 400
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
 sample_sizes <- c(400)
 result_df <- NULL

@@ -91,10 +91,11 @@ generate_data <- function(
   dat
 }
 
-dat <- generate_data(
-    t_max=20, dof=10, n_internal=100, n_external=100,
-    ar_param=0.5, plot_simulated_data=FALSE)
-plot(dat$x1[dat$is_internal], dat$x2[dat$is_internal])
-points(dat$x1[dat$is_external], dat$x2[dat$is_external], col=2)
-hist(dat$p_h[dat$is_internal], breaks=seq(0, 1, 0.02))
-hist(dat$p_h[!dat$is_internal], breaks=seq(0, 1, 0.02))
+# set.seed(20)
+# dat <- generate_data(
+#     t_max=20, dof=10, n_internal=6400, n_external=6400,
+#     ar_param=0.5, plot_simulated_data=FALSE)
+# plot(dat$x1[dat$is_internal], dat$x2[dat$is_internal])
+# points(dat$x1[dat$is_external], dat$x2[dat$is_external], col=2)
+# hist(dat$p_h[dat$is_internal], breaks=seq(0, 1, 0.02))
+# hist(dat$p_h[!dat$is_internal], breaks=seq(0, 1, 0.02))

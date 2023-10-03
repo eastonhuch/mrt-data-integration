@@ -56,7 +56,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
     scores[, pos_alpha_h] <- (a - p_h_hat) * X_alpha_h
     sd_p_h_hat <- sqrt(p_h_hat * (1-p_h_hat))
     X_alpha_h_scaled <- sd_p_h_hat * X_alpha_h
-    hessian[pos_alpha_h, pos_alpha_h] <- -crossprod(X_alpha_h_scaled)
+    hessian[pos_alpha_h, pos_alpha_h] <- crossprod(X_alpha_h_scaled) # Should this be negative?
   }
   
   # p_s_hat score/hessian
@@ -64,7 +64,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
   sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
   X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
-  hessian[pos_alpha_s, pos_alpha_s] <- -crossprod(X_alpha_s_scaled)
+  hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled) # Should this be negative?
   
   # WCLS scores and Hessian
   p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
@@ -81,7 +81,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   GtWG <- crossprod(X_beta_hs_scaled)
   hessian[pos_beta_hs, pos_beta_hs] <- GtWG
 
-  # I think these have negative signs because I'm using (-A^-1) B (-A^-1)
+  # These have negative signs because I'm using (-A^-1) B (-A^-1) in my sandwich
   p_s_hat_a_deriv <- -(2*a-1) * p_s_hat * (1 - p_s_hat)
   log_p_s_hat_a_deriv <- p_s_hat_a_deriv / p_s_hat_a
   log_p_s_deriv <- -(1-p_s_hat)
