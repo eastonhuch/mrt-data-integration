@@ -115,7 +115,7 @@ etwcls <- function(data) {
   
   # Tilting
   tilt_mod <- glm(
-    is_internal ~ bs(x1, df=3, degree=2) * I(bs(x2, df=3, degree=2)),
+    is_internal ~ poly(x1, 2) * I(poly(x2, 2)),
     family=binomial(), data=data)
   delta <- coef(tilt_mod)
   internal_prop <- mean(data$is_internal)
