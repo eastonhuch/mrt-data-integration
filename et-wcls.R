@@ -82,7 +82,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_r_X_beta_r) * wcls_weighted_resids) %*% p_r_deriv +
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
   
-  hessian[pos_beta_hr, pos_delta] <- t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
+  hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
   
   # Assemble sandwich
   n_users <- max(data$user_id)
@@ -115,7 +115,7 @@ etwcls <- function(data) {
   
   # Tilting
   tilt_mod <- glm(
-    is_internal ~ poly(x1, 2) * I(poly(x2, 2)),
+    is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
     family=binomial(), data=data)
   delta <- coef(tilt_mod)
   internal_prop <- mean(data$is_internal)

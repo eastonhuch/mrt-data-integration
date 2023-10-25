@@ -89,7 +89,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
 
   if (tilt) {
-    hessian[pos_beta_hr, pos_delta] <- t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
+    hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
   }
   
   # Assemble sandwich
