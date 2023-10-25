@@ -1,7 +1,9 @@
 dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   # Extract some columns
   data_internal <- data[data$is_internal,]
+  data_external <- data[data$is_external,]
   is_internal <- data$is_internal
+  is_external <- data$is_external
   y <- data$y
   p_h_a <- data$p_h_a
   a <- data$a
@@ -13,7 +15,10 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_s <- model.matrix(beta_s_formula, data=data)
   X_beta_s_raw <- X_beta_s / a_centered
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
+  X_delta <- model.matrix(formula(models$tilt), data=data)
   X_beta_r_internal <- model.matrix(formula(models$r), data=data_internal)
+  X_beta_r_external <- model.matrix(formula(models$r), data=data_external)
+  X_beta_r <- model.matrix(formula(models$r), data=data)
   
   # Store dimensions
   n <- nrow(X_beta_h)
@@ -21,22 +26,27 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   d_h <- ncol(X_beta_h)
   d_s <- ncol(X_beta_s)
   d_hs <- d_h + d_s
+  d_delta <- ncol(X_delta)
   d_r <- ncol(X_beta_r_internal)
-  d <- d_alpha_s + d_h + d_s + d_r
+  d <- d_alpha_s + d_h + d_s + d_delta + 2 * d_r
   
   # Extract coefficients
   alpha_s <- coef(models$p_s)
   beta_hs <- coef(models$wcls)
   beta_h <- beta_hs[seq(d_h)]
   beta_s <- beta_hs[seq(d_h+1, d_h+d_s)]
+  delta <- coef(models$tilt)
   beta_r <- coef(models$r)
+  beta_r_et <- models$r_et
   
   # Construct position vectors
   pos_alpha_s <- seq(d_alpha_s)
   pos_beta_h <- max(pos_alpha_s) + seq(d_h)
   pos_beta_s <- max(pos_beta_h) + seq(d_s)
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
-  pos_beta_r <- max(pos_beta_s) + seq(d_r)
+  pos_delta <- max(pos_beta_hs) + seq(d_delta)
+  pos_beta_r <- max(pos_delta) + seq(d_r)
+  pos_beta_r_et <- max(pos_beta_r) + seq(d_r)
   
   # scores/Hessian
   scores <- matrix(0, nrow=n, ncol=d)
@@ -74,13 +84,35 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% log_p_s_deriv +
     t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% log_p_s_deriv
   
+  # Tilt scores and Hessian
+  prop_internal <- mean(is_internal)
+  rho <- prop_internal / (1 - prop_internal)
+  p_delta_num <- rho * c(exp(X_delta %*% delta))
+  p_delta <- p_delta_num / (1 + p_delta_num)
+  scores[, pos_delta] <- (is_internal - p_delta) * X_delta
+  X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
+  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
+  
   # beta_r score
   scores[is_internal, pos_beta_r] <- (data_internal$y_tilde - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
-  y_tilde_denom <- data_internal$a - (1 - data_internal$p_h)
-  hessian[pos_beta_r, pos_beta_h] <- -t(X_beta_r_internal) %*% (X_beta_h[is_internal,] / y_tilde_denom)
-  hessian[pos_beta_r, pos_beta_s] <- (-t(X_beta_r_internal) %*% 
-    (X_beta_s[is_internal]/y_tilde_denom + X_beta_s_raw[is_internal,]))
+  hessian[pos_beta_r, pos_beta_h] <- t(X_beta_r_internal) %*% (X_beta_h[is_internal,] / data_internal$y_tilde_denom)
+  hessian[pos_beta_r, pos_beta_s] <- (t(X_beta_r_internal) %*% 
+    (X_beta_s[is_internal]/data_internal$y_tilde_denom + X_beta_s_raw[is_internal,]))
+  
+  # DRET-WCLS
+  scores[, pos_beta_r_et] <- (
+    data$is_external * data$tilt_ratios * (data$y - data$f_h_a) / data$y_tilde_denom +
+      data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et))
+  ) * X_beta_r
+  hessian[pos_beta_r_et, pos_beta_r_et] <- crossprod(X_beta_r_internal)
+  hessian[pos_beta_r_et, pos_delta] <- -t(X_beta_r_external) %*% (
+    data_external$tilt_ratios * data_external$y_tilde_frac * X_delta[is_external,])
+  hessian[pos_beta_r_et, pos_beta_h] <- t(X_beta_r_external) %*% (
+    data_external$tilt_ratios / data_external$y_tilde_denom * X_beta_h[is_external,])
+  hessian[pos_beta_r_et, pos_beta_s] <- (
+    t(X_beta_r_external) %*% (data_external$tilt_ratios / data_external$y_tilde_denom * X_beta_s[is_external,]) -
+    t(X_beta_r_internal) %*% X_beta_s_raw[is_internal,])
   
   # Assemble sandwich
   n_users <- max(data$user_id)
@@ -114,7 +146,7 @@ drwcls <- function(data) {
   data$p_s_hat_a <- data$a * data$p_s_hat + (1 - data$a) * (1 - data$p_s_hat)
   data$w <- data$p_s_hat_a / data$p_h_a
   
-  # WCLS
+  # S-moderated model
   beta_h_formula <- y ~ x1 + x2 + x3
   beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
@@ -122,8 +154,9 @@ drwcls <- function(data) {
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data, weights=w)
   last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
-  beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
-  beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
+  beta_hs <- coef(wcls_mod)
+  beta_h <- beta_hs[ seq(last_beta_h_idx)]
+  beta_s <- beta_hs[-seq(last_beta_h_idx)]
   data$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data) %*% beta_s) / data$a_centered
   d_s <- length(beta_s)
   data_1 <- data
@@ -138,19 +171,47 @@ drwcls <- function(data) {
   data$f_h_0 <- predict(wcls_mod, newdata = data_0)
   data$f_h_a <- data$a * data$f_h_1 + (1 - data$a) * data$f_h_0
   data$y_tilde_denom <- data$a - (1 - data$p_h)
-  data$y_tilde <- (data$y - data$f_h_a) / data$y_tilde_denom + data$wcls_s_causal_effects
+  data$y_tilde_frac <- (data$y - data$f_h_a) / data$y_tilde_denom
+  data$y_tilde <- data$y_tilde_frac + data$wcls_s_causal_effects
+  # NOTE: Not currently using weights (\Tilde{\sigma}) for this one
   
-  # beta_r
+  # Tilting Model
+  tilt_mod <- glm(
+    is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
+    family=binomial(), data=data)
+  delta <- coef(tilt_mod)
+  internal_prop <- mean(data$is_internal)
+  delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
+  X_delta <- model.matrix(tilt_mod)
+  raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
+  data$w_and_tilt <- data$w * data$tilt_ratios
+  
+  # DRP-WCLS
   data_internal <- data[data$is_internal,]
   r_formula <- y_tilde ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
   
+  # DRET-WCLS
+  data_external <- data[data$is_external,]
+  X_beta_r_internal <- model.matrix(r_formula, data=data_internal)
+  XtX_beta_r_internal <- crossprod(X_beta_r_internal)
+  X_beta_r_external <- model.matrix(r_formula, data=data_external)
+  beta_r_et <- c(solve(XtX_beta_r_internal, (
+    t(X_beta_r_internal) %*% data_internal$wcls_s_causal_effects +
+      t(X_beta_r_external) %*% (data_external$tilt_ratios * data_external$y_tilde_frac)
+  )))
+  # NOTE: I need to figure out a way to standardize by the proportion in each study
+  # Idea: Estimate proportions with new equations
+
   # Models list
   models <- list(
     p_s=p_s_mod,
     wcls=wcls_mod,
-    r=r_mod
+    r=r_mod,
+    tilt=tilt_mod,
+    r_et=beta_r_et
   )
   
   # Total number of parameters
@@ -158,29 +219,45 @@ drwcls <- function(data) {
     alpha_s,
     beta_h,
     beta_s,
-    beta_r
+    delta,
+    beta_r,
+    beta_r_et
   )
   n_params <- length(vector_estimate)
   
   # Standard errors
   sandwich_list <- dr_sandwich(data, models, beta_h_formula, beta_s_formula)
   sandwich <- sandwich_list$sandwich
-  pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
+  pos_beta_r <- length(alpha_s) + length(beta_hs) + length(delta) + seq(2*length(beta_r))
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
-  se_beta_r <- sqrt(diag(var_beta_r))
-  beta_r_error <- beta_r - beta_r_true
-  beta_r_z_scores <- beta_r_error / se_beta_r
-  beta_r_chi2 <- beta_r_error %*% solve(var_beta_r, beta_r_error)
+  Lambda <- chol2inv(chol(var_beta_r))
+  half_d_r <- length(beta_r)
+  first_half <- 1:half_d_r
+  second_half <- (half_d_r+1):(2*half_d_r)
+  Lambda_sum <- (
+    Lambda[first_half, first_half] + Lambda[first_half, second_half] +
+      Lambda[second_half, first_half] + Lambda[second_half, second_half])
+  Lambda_sum_inv <- chol2inv(chol(Lambda_sum))
+  z <- Lambda %*% c(beta_r, beta_r_et)
+  z_sum <- z[first_half] + z[second_half]
+  beta_r_pooled <- c(Lambda_sum_inv %*% z_sum)
+  Lambda_horiz_sum <- Lambda[first_half,] + Lambda[second_half,]
+  var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
+  se_beta_r_pooled <- sqrt(diag(var_beta_r_pooled))
+  beta_r_pooled_error <- beta_r_pooled - beta_r_true
+  beta_r_pooled_z_scores <- beta_r_pooled_error / se_beta_r_pooled
+  beta_r_pooled_chi2 <- beta_r_pooled_error %*% solve(var_beta_r_pooled, beta_r_pooled_error)
   
   results <- list(
-    beta_r=beta_r,
-    se_beta_r=se_beta_r,
-    var_beta_r=var_beta_r,
-    beta_r_chi2=beta_r_chi2,
-    beta_r_z_scores=beta_r_z_scores,
+    beta_r=beta_r_pooled,
+    se_beta_r=se_beta_r_pooled,
+    var_beta_r=var_beta_r_pooled,
+    beta_r_chi2=beta_r_pooled_chi2,
+    beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
     meat=sandwich_list$meat
   )
   results
 }
+
