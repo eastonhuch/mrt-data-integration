@@ -102,7 +102,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   )
 }
 
-etwcls <- function(data) {
+etwcls <- function(data, kronecker=FALSE) {
   beta_r_true <- c(-2, 5)
   
   # Propensity score model
@@ -159,24 +159,39 @@ etwcls <- function(data) {
   pos_beta_r <- length(alpha_r) + length(delta) + length(beta_h) + seq_along(beta_r)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   Lambda <- chol2inv(chol(var_beta_r))
-  half_d_r <- round(d_r / 2)
-  first_half <- 1:half_d_r
-  second_half <- (half_d_r+1):(2*half_d_r)
-  Lambda_sum <- (
-    Lambda[first_half, first_half] + Lambda[first_half, second_half] +
-    Lambda[second_half, first_half] + Lambda[second_half, second_half])
-  Lambda_sum_inv <- chol2inv(chol(Lambda_sum))
-  z <- Lambda %*% beta_r
-  z_sum <- z[first_half] + z[second_half]
-  beta_r_pooled <- c(Lambda_sum_inv %*% z_sum)
-  Lambda_horiz_sum <- Lambda[first_half,] + Lambda[second_half,]
-  var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
+  
+  if (kronecker) {
+    Lambda_tilde <- matrix(0, nrow=2, ncol=2)
+    Lambda_tilde[1, 1] <- Lambda[1, 1]
+    Lambda_tilde[2, 1] <- Lambda[3, 1]
+    Lambda_tilde[1, 2] <- Lambda[1, 3]
+    Lambda_tilde[2, 2] <- Lambda[3, 3]
+    w1 <- sum(Lambda_tilde[,1])
+    w2 <- sum(Lambda_tilde[,2])
+    w_sum <- w1 + w2
+    beta_r_pooled <- (w1 * beta_r[1:2] + w2 * beta_r[3:4]) / (w_sum)
+    kron_mat <- t(Lambda_tilde[1,]) %x% diag(2) + t(Lambda_tilde[2,]) %x% diag(2)
+    var_beta_r_pooled <- (kron_mat %*% var_beta_r %*% t(kron_mat)) / w_sum^2
+  } else {
+    half_d_r <- round(d_r / 2)
+    first_half <- 1:half_d_r
+    second_half <- (half_d_r+1):(2*half_d_r)
+    Lambda_sum <- (
+      Lambda[first_half, first_half] + Lambda[first_half, second_half] +
+        Lambda[second_half, first_half] + Lambda[second_half, second_half])
+    Lambda_sum_inv <- chol2inv(chol(Lambda_sum))
+    z <- Lambda %*% beta_r
+    z_sum <- z[first_half] + z[second_half]
+    beta_r_pooled <- c(Lambda_sum_inv %*% z_sum)
+    Lambda_horiz_sum <- Lambda[first_half,] + Lambda[second_half,]
+    var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
+  }
   
   se_beta_r_pooled <- sqrt(diag(var_beta_r_pooled))
   beta_r_pooled_error <- beta_r_pooled - beta_r_true
   beta_r_pooled_z_scores <- beta_r_pooled_error / se_beta_r_pooled
   beta_r_pooled_chi2 <- beta_r_pooled_error %*% solve(var_beta_r_pooled, beta_r_pooled_error)
-  
+
   results <- list(
     beta_r=beta_r_pooled,
     se_beta_r=se_beta_r_pooled,
