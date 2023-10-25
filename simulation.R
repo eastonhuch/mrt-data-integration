@@ -8,6 +8,7 @@ source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
 source("~/Documents/research/mrt-data-integration/et-wcls.R")
 source("~/Documents/research/mrt-data-integration/dr-wcls.R")
+source("~/Documents/research/mrt-data-integration/dr-wcls-and-wcls.R")
 require(geepack)
 require(abind)
 require(tidyverse)
@@ -22,7 +23,7 @@ require(splines)
 beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS")
+method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "DR-WCLS/WCLS-Internal")
 
 process_results <- function(model) {
   covered <- (
@@ -77,6 +78,10 @@ simulate_one <- function(n_internal, n_external) {
   model_dr_wcls <- drwcls(dat)
   results_dr_wcls <- process_results(model_dr_wcls)
   
+  # DR-WCLS
+  model_dr_wcls_and_wcls <- drwcls_and_wcls(dat)
+  results_dr_wcls_and_wcls <- process_results(model_dr_wcls_and_wcls)
+  
   # Bind results together
   results <- abind(
     results_pwcls_pooled,
@@ -88,6 +93,7 @@ simulate_one <- function(n_internal, n_external) {
     results_et_wcls_kron,
     results_et_wcls,
     results_dr_wcls,
+    results_dr_wcls_and_wcls,
     along=3
   )
   dimnames(results)[[3]] <- method_names
