@@ -1,12 +1,13 @@
 # Simulation study for
 # "Data integration methods for micro-randomized trials"
 
-random_seed <- 0 # Other seeds are set within function simulate_all()
+random_seed <- 1230 # Other seeds are set within function simulate_all()
 set.seed(random_seed)
 source("~/Documents/research/mrt-data-integration/generate_data.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
 source("~/Documents/research/mrt-data-integration/et-wcls.R")
+source("~/Documents/research/mrt-data-integration/dr-wcls.R")
 require(geepack)
 require(abind)
 require(tidyverse)
@@ -21,7 +22,7 @@ require(splines)
 beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS")
+method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-OBS", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS", "DR-WCLS")
 
 process_results <- function(model) {
   covered <- (
@@ -68,6 +69,10 @@ simulate_one <- function(n_internal, n_external) {
   model_et_wcls <- etwcls(dat)
   results_et_wcls <- process_results(model_et_wcls)
   
+  # DR-WCLS
+  model_dr_wcls <- drwcls(dat)
+  results_dr_wcls <- process_results(model_dr_wcls)
+  
   # Bind results together
   results <- abind(
     results_pwcls_pooled,
@@ -77,6 +82,7 @@ simulate_one <- function(n_internal, n_external) {
     results_wcls_internal,
     results_et_wcls_equal,
     results_et_wcls,
+    results_dr_wcls,
     along=3
   )
   dimnames(results)[[3]] <- method_names
@@ -165,7 +171,7 @@ create_pretty_table <- function(result_list) {
 }
 
 # Run simulation across many sample sizes
-n_replications <- 400
+n_replications <- 10
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
 sample_sizes <- c(400)
 result_df <- NULL
