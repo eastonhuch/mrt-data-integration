@@ -45,7 +45,7 @@ print(AIC(tilt_mod7))
 
 # Really good
 tilt_mod8 <- glm(
-  is_internal ~ poly(x1, 2)*I(poly(x2, 2)),
+  is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
   family=binomial(), data=data)
 print(AIC(tilt_mod8))
 

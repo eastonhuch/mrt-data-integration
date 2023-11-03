@@ -8,7 +8,6 @@ source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
 source("~/Documents/research/mrt-data-integration/et-wcls.R")
 source("~/Documents/research/mrt-data-integration/dr-wcls.R")
-source("~/Documents/research/mrt-data-integration/dr-wcls-and-wcls.R")
 require(geepack)
 require(abind)
 require(tidyverse)
@@ -23,7 +22,7 @@ require(splines)
 beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "P-WCLS-Internal", "WCLS-Pooled", "WCLS-Internal", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "DR-WCLS/WCLS-Internal")
+method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS")
 
 process_results <- function(model) {
   covered <- (
@@ -41,6 +40,19 @@ process_results <- function(model) {
 simulate_one <- function(n_internal, n_external) {
   dat <- generate_data(t_max=20, dof=10, n_internal=n_internal, n_external=n_external, ar_param=0.5)
   
+  # WCLS-Internal
+  dat_internal <- dat[dat$is_internal, ]
+  model_wcls_internal <- wcls(dat_internal)
+  results_wcls_internal <- process_results(model_wcls_internal)
+  
+  # WCLS-Pooled
+  model_wcls_pooled <- wcls(dat)
+  results_wcls_pooled <- process_results(model_wcls_pooled)
+
+  # P-WCLS-Internal
+  model_pwcls_internal <- walters_method(dat, internal_only=TRUE)
+  results_pwcls_internal <- process_results(model_pwcls_internal)
+    
   # P-WCLS-Pooled
   model_pwcls_pooled <- walters_method(dat)
   results_pwcls_pooled <- process_results(model_pwcls_pooled)
@@ -49,19 +61,6 @@ simulate_one <- function(n_internal, n_external) {
   model_pwcls_pooled_obs <- walters_method(dat, observational=TRUE)
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
-  # P-WCLS-Internal
-  model_pwcls_internal <- walters_method(dat, internal_only=TRUE)
-  results_pwcls_internal <- process_results(model_pwcls_internal)
-  
-  # WCLS-Pooled
-  model_wcls_pooled <- wcls(dat)
-  results_wcls_pooled <- process_results(model_wcls_pooled)
-  
-  # WCLS-Internal
-  dat_internal <- dat[dat$is_internal, ]
-  model_wcls_internal <- wcls(dat_internal)
-  results_wcls_internal <- process_results(model_wcls_internal)
-  
   # ET-WCLS-Equal
   model_et_wcls_equal <- wcls(dat, tilt=TRUE)
   results_et_wcls_equal <- process_results(model_et_wcls_equal)
@@ -78,22 +77,17 @@ simulate_one <- function(n_internal, n_external) {
   model_dr_wcls <- drwcls(dat)
   results_dr_wcls <- process_results(model_dr_wcls)
   
-  # DR-WCLS
-  model_dr_wcls_and_wcls <- drwcls_and_wcls(dat)
-  results_dr_wcls_and_wcls <- process_results(model_dr_wcls_and_wcls)
-  
   # Bind results together
   results <- abind(
+    results_wcls_internal,
+    results_wcls_pooled,
+    results_pwcls_internal,
     results_pwcls_pooled,
     results_pwcls_pooled_obs,
-    results_pwcls_internal,
-    results_wcls_pooled,
-    results_wcls_internal,
     results_et_wcls_equal,
     results_et_wcls_kron,
     results_et_wcls,
     results_dr_wcls,
-    results_dr_wcls_and_wcls,
     along=3
   )
   dimnames(results)[[3]] <- method_names
@@ -116,9 +110,9 @@ simulate_all <- function(n_internal, n_external, n_replications) {
     (results[,"estimate",,] - (avg_estimate %x% array(1, dim=c(1, 1, n_replications))))^2,
     MARGIN=c(1, 2),
     FUN=mean))
-  empirical_relative_efficiency <- empirical_se[, "P-WCLS-Pooled"] / empirical_se
+  empirical_relative_efficiency <- empirical_se[, "WCLS-Internal"] / empirical_se
   avg_analytical_se <- apply(results[,"se",,], MARGIN=c(1, 2), FUN=mean)
-  analytical_relative_efficiency <- avg_analytical_se[, "P-WCLS-Pooled"] / avg_analytical_se
+  analytical_relative_efficiency <- avg_analytical_se[, "WCLS-Internal"] / avg_analytical_se
   mse <- apply((results[,"estimate",,] - beta_r_true)^2, MARGIN=c(1, 2), FUN=mean)
   rmse <- sqrt(mse)
   
@@ -184,31 +178,45 @@ create_pretty_table <- function(result_list) {
 # Run simulation across many sample sizes
 n_replications <- 400
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
-sample_sizes <- c(400)
+sample_sizes <- c(25)
 result_df <- NULL
 results_25_25 <- NULL
-for (n_internal in sample_sizes) {
-  for (n_external in sample_sizes) {
-    results_i <- simulate_all(n_internal, n_external, n_replications)
-    result_df_i <- create_pretty_table(results_i)
-    if (is.null(result_df)) {
-      result_df <- result_df_i
-    } else {
-      result_df <- rbind(result_df, result_df_i)
-    }
+sample_size_pairs <- list(
+  c(25, 25), c(100, 100), c(400, 400), c(1600, 1600), c(6400, 6400),
+  c(25, 100), c(25, 400), c(25, 1600), c(25, 6400),
+  c(100, 25), c(400, 25), c(1600, 25), c(6400, 25)
+)
+sample_size_pairs <- list(c(400, 400))
 
-    if ((n_internal == 25) && (n_external == 25)) {
-      results_25_25 <- results_i
-    }
-    
-    if ((n_internal == 100) && (n_external == 100)) {
-      results_100_100 <- results_i
-    }
-    
-    if ((n_internal == 400) && (n_external == 400)) {
-      results_400_400 <- results_i
-    }
+for (sample_size_pair in sample_size_pairs) {
+  results_i <- simulate_all(n_internal, n_external, n_replications)
+  result_df_i <- create_pretty_table(results_i)
+  if (is.null(result_df)) {
+    result_df <- result_df_i
+  } else {
+    result_df <- rbind(result_df, result_df_i)
   }
+
+  if ((n_internal == 25) && (n_external == 25)) {
+    results_25_25 <- results_i
+  }
+  
+  if ((n_internal == 100) && (n_external == 100)) {
+    results_100_100 <- results_i
+  }
+  
+  if ((n_internal == 400) && (n_external == 400)) {
+    results_400_400 <- results_i
+  }
+  
+  if ((n_internal == 1600) && (n_external == 1600)) {
+    results_1600_1600 <- results_i
+  }
+  
+  if ((n_internal == 6400) && (n_external == 6400)) {
+    results_6400_6400 <- results_i
+  }
+  
 }
 colnames(result_df) <- colnames(result_df_i)
 
@@ -234,6 +242,14 @@ colnames(result_df) <- colnames(result_df_i)
 results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
 save(results_400_400, file=results_400_400_file)
 load(results_400_400_file)
+
+# results_1600_1600_file <- "~/Documents/research/mrt-data-integration/results_1600_1600.RData"
+# save(results_1600_1600, file=results_1600_1600_file)
+# load(results_1600_1600_file)
+# 
+# results_6400_6400_file <- "~/Documents/research/mrt-data-integration/results_6400_6400.RData"
+# save(results_6400_6400, file=results_6400_6400_file)
+# load(results_6400_6400_file)
 
 # Plot effect of increasing external sample size
 unbiased_method_names <- method_names[method_names != "WCLS-Pooled"]
@@ -394,8 +410,8 @@ print_exact_number_nicely <- function(x, digits=1) {
 }
 
 result_table <- result_df %>% filter(
-    `Internal Sample Size` == 400,
-    `External Sample Size` == 400,
+    `Internal Sample Size` == 25,
+    `External Sample Size` == 25,
   ) %>% mutate(
     `True Value (Numeric)` = `True Value`,
     `Relative Efficiency (Numeric)` = `Empirical Relative Efficiency`,
