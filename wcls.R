@@ -101,7 +101,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-30)
   sandwich <- tcrossprod(half_sandwich)
   list(
     sandwich=sandwich,
@@ -183,7 +183,8 @@ wcls <- function(data, tilt=FALSE) {
     beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat
+    meat=sandwich_list$meat,
+    tilt_warning=FALSE
   )
   results
 }

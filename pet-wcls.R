@@ -135,7 +135,7 @@ petwcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula, beta_
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-30)
   sandwich <- tcrossprod(half_sandwich)
   list(
     sandwich=sandwich,
@@ -158,10 +158,22 @@ petwcls <- function(data) {
   data$w <- data$p_s_hat_a / data$p_h_a
 
   # Tilting
-  tilt_mod <- glm(
-    is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
-    family=binomial(), data=data)
+  # Try simpler model if there's a warning
+  tilt_mod <- tryCatch(
+    glm(
+      is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
+      family=binomial(), data=data),
+    warning=function(w) tryCatch(
+      glm(
+        is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+        family=binomial(), data=data),
+      warning=function(w) glm(
+        is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
+        family=binomial(), data=data)
+    )
+  )
   delta <- coef(tilt_mod)
+  tilt_warning <- length(delta) <= 10
   internal_prop <- mean(data$is_internal)
   delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
   X_delta <- model.matrix(tilt_mod)
@@ -197,6 +209,7 @@ petwcls <- function(data) {
   r_formula <- wcls_s_causal_effects ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
+  d_r <- length(beta_r)
   
   # Models list
   models <- list(
@@ -250,7 +263,8 @@ petwcls <- function(data) {
     beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat
+    meat=sandwich_list$meat,
+    tilt_warning=tilt_warning
   )
   results
 }

@@ -80,7 +80,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   X_beta_hs_scaled <- sqrt_w * X_beta_hs
   GtWG <- crossprod(X_beta_hs_scaled)
   hessian[pos_beta_hs, pos_beta_hs] <- GtWG
-
+  
   # These have negative signs because I'm using (-A^-1) B (-A^-1) in my sandwich
   p_s_hat_a_deriv <- -(2*a-1) * p_s_hat * (1 - p_s_hat)
   log_p_s_hat_a_deriv <- p_s_hat_a_deriv / p_s_hat_a
@@ -97,7 +97,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
     hessian[pos_beta_hs, pos_alpha_h] <- 
       t(X_beta_hs * wcls_weighted_resids) %*% (log_p_h_hat_a_deriv * X_alpha_h)
   }
-
+  
   # beta_r score
   scores[is_internal, pos_beta_r] <- (data_pooled$wcls_s_causal_effects[data_pooled$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
@@ -169,7 +169,7 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
   r_formula <- wcls_s_causal_effects ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
-
+  
   # Models list
   models <- list(
     p_s=p_s_mod,
@@ -207,8 +207,7 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
     beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat,
-    tilt_warning=FALSE
+    meat=sandwich_list$meat
   )
   results
 }

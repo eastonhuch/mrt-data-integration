@@ -32,7 +32,8 @@ process_results <- function(model) {
   results <- cbind(
     estimate=model$beta_r,
     se=model$se_beta_r,
-    covered=covered
+    covered=covered,
+    tilt_warning=model$tilt_warning
   )
   results
 }
@@ -63,15 +64,15 @@ simulate_one <- function(n_internal, n_external) {
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
   # ET-WCLS-Equal
-  model_et_wcls_equal <- wcls(dat, tilt=TRUE)
+  model_et_wcls_equal <- etwcls(dat, pooling_method="equal")
   results_et_wcls_equal <- process_results(model_et_wcls_equal)
   
   # ET-WCLS-Kron
-  model_et_wcls_kron <- etwcls(dat, kronecker=TRUE)
+  model_et_wcls_kron <- etwcls(dat, pooling_method="kronecker")
   results_et_wcls_kron <- process_results(model_et_wcls_kron)
 
   # ET-WCLS
-  model_et_wcls <- etwcls(dat)
+  model_et_wcls <- etwcls(dat, pooling_method="full")
   results_et_wcls <- process_results(model_et_wcls)
   
   # DR-WCLS
@@ -110,6 +111,7 @@ simulate_all <- function(n_internal, n_external, n_replications) {
 
   # Process results
   coverage <- apply(results[,"covered",,], MARGIN=c(1, 2), FUN=mean)
+  tilt_warnings <- apply(results[,"tilt_warning",,], MARGIN=c(1, 2), FUN=sum)
   avg_estimate <- apply(results[,"estimate",,], MARGIN=c(1, 2), FUN=mean)
   bias <- avg_estimate - beta_r_true
   empirical_se <- sqrt(apply(
@@ -125,6 +127,7 @@ simulate_all <- function(n_internal, n_external, n_replications) {
   # Create results list
   list(
     results=results,
+    tilt_warnings=tilt_warnings,
     coverage=coverage,
     avg_estimate=avg_estimate,
     bias=bias,
@@ -154,7 +157,8 @@ create_pretty_table <- function(result_list) {
     c(t(result_list$avg_analytical_se)),
     c(t(result_list$analytical_relative_efficiency)),
     c(t(result_list$rmse)),
-    c(t(result_list$coverage))
+    c(t(result_list$coverage)),
+    c(t(result_list$tilt_warnings))
   )
   coef_table <- round(coef_table, digits=3) %>% as.data.frame()
   coef_table <- cbind(
@@ -176,15 +180,17 @@ create_pretty_table <- function(result_list) {
     "Analytical Standard Error",
     "Analytical Relative Efficiency",
     "rMSE",
-    "Coverage (95% Nominal)"
+    "Coverage (95% Nominal)",
+    "# Tilt Warnings"
   )
   coef_table  
 }
 
 # Run simulation across many sample sizes
-n_replications <- 400
-# sample_sizes <- c(25, 100, 400, 1600, 6400)
-sample_sizes <- c(400)
+loop_start_time <- Sys.time()
+n_replications <- 2
+sample_sizes <- c(25, 100, 400, 1600, 6400)
+# sample_sizes <- c(400)
 result_df <- NULL
 results_25_25 <- NULL
 sample_size_pairs <- list(
@@ -192,7 +198,6 @@ sample_size_pairs <- list(
   c(25, 100), c(25, 400), c(25, 1600), c(25, 6400),
   c(100, 25), c(400, 25), c(1600, 25), c(6400, 25)
 )
-sample_size_pairs <- list(c(400, 400))
 
 for (sample_size_pair in sample_size_pairs) {
   n_internal <- sample_size_pair[1]
@@ -227,6 +232,10 @@ for (sample_size_pair in sample_size_pairs) {
   
 }
 colnames(result_df) <- colnames(result_df_i)
+loop_end_time <- Sys.time()
+loop_time <- loop_end_time - loop_start_time
+estimated_time_full <- loop_time * 400 / n_replications
+print(paste("Estimated time for full run:", estimated_time_full))
 
 # For recreating just results_25_25
 # results_25_25 <- simulate_all(25, 25, n_replications)
@@ -238,130 +247,134 @@ result_df <- read.csv(result_df_file, check.names=FALSE)
 colnames(result_df) <- colnames(result_df_i)
 
 # Checkpoint results_25_25
-# results_25_25_file <- "~/Documents/research/mrt-data-integration/results_25_25.RData"
-# save(results_25_25, file=results_25_25_file)
-# load(results_25_25_file)
+results_25_25_file <- "~/Documents/research/mrt-data-integration/results_25_25.RData"
+save(results_25_25, file=results_25_25_file)
+load(results_25_25_file)
 
 # Checkpoint results_100_100
-# results_100_100_file <- "~/Documents/research/mrt-data-integration/results_100_100.RData"
-# save(results_100_100, file=results_100_100_file)
-# load(results_100_100_file)
+results_100_100_file <- "~/Documents/research/mrt-data-integration/results_100_100.RData"
+save(results_100_100, file=results_100_100_file)
+load(results_100_100_file)
 
 results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
 save(results_400_400, file=results_400_400_file)
 load(results_400_400_file)
 
-# results_1600_1600_file <- "~/Documents/research/mrt-data-integration/results_1600_1600.RData"
-# save(results_1600_1600, file=results_1600_1600_file)
-# load(results_1600_1600_file)
-# 
-# results_6400_6400_file <- "~/Documents/research/mrt-data-integration/results_6400_6400.RData"
-# save(results_6400_6400, file=results_6400_6400_file)
-# load(results_6400_6400_file)
+results_1600_1600_file <- "~/Documents/research/mrt-data-integration/results_1600_1600.RData"
+save(results_1600_1600, file=results_1600_1600_file)
+load(results_1600_1600_file)
+
+results_6400_6400_file <- "~/Documents/research/mrt-data-integration/results_6400_6400.RData"
+save(results_6400_6400, file=results_6400_6400_file)
+load(results_6400_6400_file)
 
 # Plot effect of increasing external sample size
 unbiased_method_names <- method_names[method_names != "WCLS-Pooled"]
-# result_df_25_internal <- result_df %>% filter(`Internal Sample Size` == 25)
-# pdf(file="~/Documents/research/mrt-data-integration/sample_size_se.pdf",
-#     width=8, height=5.4)
-# par(mfrow=c(2, 4), mai=c(0.6, 0.5, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
-# subplot_names <- coef_names
-# for (coef_counter in seq_along(beta_r_true)) {
-#   coef_name <- coef_names[coef_counter]
-#   max_se <- result_df_25_internal %>% 
-#     filter(`Coefficient Name` == coef_name) %>%
-#     pull(`Empirical Standard Error`) %>%
-#     max()
-#   plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-(0.3 * max_se), 1.2*max_se), log="x", xaxt="n",
-#        xlab="External Sample Size", ylab="", main=subplot_names[coef_counter])
-#   abline(h=0, col="gray", lty=2)
-#   if (coef_counter == 1) {
-#     title(ylab="Standard Error", line=2.7)
-#   }
-#   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
-#   axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
-#   if (coef_counter == 1) {
-#     legend("bottomleft", legend=unbiased_method_names, pch=seq_along(unbiased_method_names), col=seq_along(unbiased_method_names), bg="white")
-#   }
-#   method_counter <- 0
-#   for (method in unbiased_method_names) {
-#     method_counter <- method_counter + 1
-#     result_df_25_internal_i <- result_df_25_internal %>% filter(
-#       Method == method,
-#       `Coefficient Name` == coef_name) %>% arrange(`External Sample Size`)  
-#     lines(
-#       result_df_25_internal_i$`External Sample Size`,
-#       result_df_25_internal_i$`Empirical Standard Error`,
-#       type="b", pch=method_counter, col=method_counter
-#     )
-#   }
-# }
+result_df_25_internal <- result_df %>% filter(`Internal Sample Size` == 25)
+pdf(file="~/Documents/research/mrt-data-integration/sample_size_se.pdf",
+    width=12, height=2.5)
+par(mfrow=c(1, 5), mai=c(0.6, 0.7, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
+plot.new()
+legend("center", legend=unbiased_method_names, col=seq_along(unbiased_method_names), lty=1)
+subplot_names <- coef_names
+for (coef_counter in seq_along(beta_r_true)) {
+  coef_name <- coef_names[coef_counter]
+  all_ses <- result_df_25_internal %>%
+    filter(`Coefficient Name` == coef_name) %>%
+    pull(`Empirical Standard Error`)
+  min_se <- min(all_ses)
+  max_se <- max(all_ses)
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(0.5*min_se, 1.2*max_se), log="xy", xaxt="n",
+       xlab="External Sample Size", ylab="", main=paste("Internal:", subplot_names[coef_counter]))
+  abline(h=0, col="gray", lty=2)
+  if (coef_counter == 1) {
+    title(ylab="Standard Error", line=2.7)
+  }
+  axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
+  axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
+  # if (coef_counter == 1) {
+  #   legend("bottomleft", legend=unbiased_method_names, col=seq_along(unbiased_method_names), lty=1, bg="white")
+  # }
+  method_counter <- 0
+  for (method in unbiased_method_names) {
+    method_counter <- method_counter + 1
+    result_df_25_internal_i <- result_df_25_internal %>% filter(
+      Method == method,
+      `Coefficient Name` == coef_name) %>% arrange(`External Sample Size`)
+    lines(
+      result_df_25_internal_i$`External Sample Size`,
+      result_df_25_internal_i$`Empirical Standard Error`,
+      col=method_counter
+    )
+  }
+}
 
 # Plot effect of increasing internal sample size
-# result_df_25_external <- result_df %>% filter(`External Sample Size` == 25)
-# for (coef_counter in seq_along(beta_r_true)) {
-#   coef_name <- coef_names[coef_counter]
-#   max_se <- result_df_25_external %>% 
-#     filter(`Coefficient Name` == coef_name) %>%
-#     pull(`Empirical Standard Error`) %>%
-#     max()
-#   plot(NULL, type="n", xlim=c(20, 6800), ylim=c(-(0.3 * max_se), 1.2*max_se), log="x", xaxt="n",
-#        xlab="Internal Sample Size", ylab="")
-#   abline(h=0, col="gray", lty=2)
-#   if (coef_counter == 1) {
-#     title(ylab="Standard Error", line=2.7)
-#   }
-#   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
-#   axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
-#   method_counter <- 0
-#   for (method in unbiased_method_names) {
-#     method_counter <- method_counter + 1
-#     result_df_25_external_i <- result_df_25_external %>% filter(
-#       Method == method,
-#       `Coefficient Name` == coef_name) %>% arrange(`Internal Sample Size`)  
-#     lines(
-#       result_df_25_external_i$`Internal Sample Size`,
-#       result_df_25_external_i$`Empirical Standard Error`,
-#       type="b", pch=method_counter, col=method_counter
-#     )
-#   }
-# }
-# dev.off()
+result_df_25_external <- result_df %>% filter(`External Sample Size` == 25)
+for (coef_counter in seq_along(beta_r_true)) {
+  coef_name <- coef_names[coef_counter]
+  all_ses <- result_df_25_external %>%
+    filter(`Coefficient Name` == coef_name) %>%
+    pull(`Empirical Standard Error`)
+  min_se <- min(all_ses)
+  max_se <- max(all_ses)
+  plot(NULL, type="n", xlim=c(20, 6800), ylim=c(0.5*min_se, 1.2*max_se), log="xy", xaxt="n",
+       xlab="Internal Sample Size", ylab="", main=paste("External:", subplot_names[coef_counter]))
+  abline(h=0, col="gray", lty=2)
+  # if (coef_counter == 1) {
+  #   title(ylab="Standard Error", line=2.7)
+  # }
+  axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=sample_sizes[c(1, 3, 5)])
+  axis(side=1, at=sample_sizes[c(2, 4)], labels=sample_sizes[c(2, 4)])
+  method_counter <- 0
+  for (method in unbiased_method_names) {
+    method_counter <- method_counter + 1
+    result_df_25_external_i <- result_df_25_external %>% filter(
+      Method == method,
+      `Coefficient Name` == coef_name) %>% arrange(`Internal Sample Size`)
+    lines(
+      result_df_25_external_i$`Internal Sample Size`,
+      result_df_25_external_i$`Empirical Standard Error`,
+      col=method_counter
+    )
+  }
+}
+dev.off()
 
 # Add grouped side-by-side boxplots
-# estimates_25_25 <- results_25_25$results[,"estimate",,]
-# dimnames(estimates_25_25)[[1]] <- coef_names
-# estimates_25_25_df <- data.frame()
-# for (coef_name in coef_names) {
-#   for (method in method_names) {
-#     estimates_25_25_df_i <- data.frame(Estimate=estimates_25_25[coef_name, method,])
-#     estimates_25_25_df_i["Method"] <- method
-#     estimates_25_25_df_i["MethodNumber"] <- which.max(method_names == method)
-#     estimates_25_25_df_i["Coefficient"] <- coef_name
-#     estimates_25_25_df_i["CoefficientNumber"] <- which.max(coef_names == coef_name)
-#     estimates_25_25_df <- rbind(
-#       estimates_25_25_df,
-#       estimates_25_25_df_i
-#     )
-#   }
-# }
-# boxplots_25_25_df <- estimates_25_25_df %>% mutate(
-#   Method = fct_reorder(Method, MethodNumber),
-#   Coefficient = fct_reorder(Coefficient, CoefficientNumber)
-# )
-# pdf("~/Documents/research/mrt-data-integration/estimates_25_25.pdf", width=10, height=3)
-# boxplot_linewidth <- 0.3
-# ggplot() + 
-#   geom_boxplot(data=boxplots_25_25_df, aes(x=Coefficient, y=Estimate, fill=Method)) +
-#   geom_line(
-#     data=data.frame(x=c(0.5, 1.5), y=rep(-2, 2)),
-#     aes(x=x, y=y, group=1),
-#     linewidth=boxplot_linewidth) +
-#   geom_line(
-#     data=data.frame(x=c(1.5, 2.5), y=rep(-5, 2)),
-#     aes(x=x, y=y, group=1),
-#     linewidth=boxplot_linewidth)
-# dev.off()
+estimates_25_25 <- results_25_25$results[,"estimate",,]
+dimnames(estimates_25_25)[[1]] <- coef_names
+estimates_25_25_df <- data.frame()
+for (coef_name in coef_names) {
+  for (method in method_names) {
+    estimates_25_25_df_i <- data.frame(Estimate=estimates_25_25[coef_name, method,])
+    estimates_25_25_df_i["Method"] <- method
+    estimates_25_25_df_i["MethodNumber"] <- which.max(method_names == method)
+    estimates_25_25_df_i["Coefficient"] <- coef_name
+    estimates_25_25_df_i["CoefficientNumber"] <- which.max(coef_names == coef_name)
+    estimates_25_25_df <- rbind(
+      estimates_25_25_df,
+      estimates_25_25_df_i
+    )
+  }
+}
+boxplots_25_25_df <- estimates_25_25_df %>% mutate(
+  Method = fct_reorder(Method, MethodNumber),
+  Coefficient = fct_reorder(Coefficient, CoefficientNumber)
+)
+pdf("~/Documents/research/mrt-data-integration/estimates_25_25.pdf", width=10, height=3)
+boxplot_linewidth <- 0.3
+ggplot() +
+  geom_boxplot(data=boxplots_25_25_df, aes(x=Coefficient, y=Estimate, fill=Method)) +
+  geom_line(
+    data=data.frame(x=c(0.5, 1.5), y=rep(-2, 2)),
+    aes(x=x, y=y, group=1),
+    linewidth=boxplot_linewidth) +
+  geom_line(
+    data=data.frame(x=c(1.5, 2.5), y=rep(-5, 2)),
+    aes(x=x, y=y, group=1),
+    linewidth=boxplot_linewidth)
+dev.off()
 
 # Plot confidence intervals for first two methods
 estimates_400_400 <- results_400_400$results[,"estimate",,]
@@ -370,41 +383,47 @@ pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
     width=6.5, height=2.5)
 par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
 
-# dat <- generate_data(n_internal=100000, n_external=100000)
-# max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
-# x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
-# hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
-# 
-# x1_design_matrix <- cbind(1, x1_values)
-# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 125),
-#      xlab=expression(X[1]), ylab="Causal Effect",
-#      main="(b) 95% CIs")
-# dash_lty <- 2
-# x1_plot_method_numbers <- c(1, 3)
-# for (method_number in x1_plot_method_numbers) {
-#   method_name <- method_names[method_number]
-#   method_estimates <- estimates_400_400[,method_name,]
-#   method_fitted_values <- x1_design_matrix %*% method_estimates
-#   mean_method_fitted_values <- rowMeans(method_fitted_values)
-#   lines(x1_values, mean_method_fitted_values, col=method_number)
-#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.025)), col=method_number, lty=dash_lty)
-#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
-# }
-# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
-# 
-# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
-#      xlab=expression(X[1]), ylab="Standard Error",
-#      main="(c) SE Comparison")
-# for (method_number in x1_plot_method_numbers) {
-#   method_name <- method_names[method_number]
-#   method_estimates <- estimates_400_400[,method_name,]
-#   method_fitted_values <- x1_design_matrix %*% method_estimates
-#   method_ses <- apply(method_fitted_values, MARGIN=1, sd)
-#   lines(x1_values, method_ses, col=method_number)
-# }
-# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
-# 
-# dev.off()
+dat <- generate_data(n_internal=100000, n_external=100000)
+max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
+x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
+hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
+
+x1_design_matrix <- cbind(1, x1_values)
+plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 125),
+     xlab=expression(X[1]), ylab="Causal Effect",
+     main="(b) 95% CIs")
+dash_lty <- 2
+x1_plot_method_numbers <- c(1, 3)
+for (method_number in x1_plot_method_numbers) {
+  method_name <- method_names[method_number]
+  method_estimates <- estimates_400_400[,method_name,]
+  method_fitted_values <- x1_design_matrix %*% method_estimates
+  mean_method_fitted_values <- rowMeans(method_fitted_values)
+  lines(x1_values, mean_method_fitted_values, col=method_number)
+  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.025)), col=method_number, lty=dash_lty)
+  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
+}
+legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
+
+plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
+     xlab=expression(X[1]), ylab="Standard Error",
+     main="(c) SE Comparison")
+for (method_number in x1_plot_method_numbers) {
+  method_name <- method_names[method_number]
+  method_estimates <- estimates_400_400[,method_name,]
+  method_fitted_values <- x1_design_matrix %*% method_estimates
+  method_ses <- apply(method_fitted_values, MARGIN=1, sd)
+  lines(x1_values, method_ses, col=method_number)
+}
+legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers)
+
+dev.off()
+
+# Number of warnings by method/sample size
+result_df %>%
+  group_by(Method, `Internal Sample Size`, `External Sample Size`) %>%
+  summarise(`# Tilt Warnings`=sum(`# Tilt Warnings`))
+  
 
 # Table
 print_exact_number_nicely <- function(x, digits=1) {

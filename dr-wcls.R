@@ -115,14 +115,14 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   hessian[pos_beta_r_et, pos_delta] <- -t(X_beta_r_external) %*% (
     data_external$tilt_ratios * data_external$y_tilde_frac * X_delta[is_external,]) / (1 - pi_internal)
   hessian[pos_beta_r_et, pos_beta_h] <- t(X_beta_r_external) %*% (
-    data_external$tilt_ratios / data_external$y_tilde_denom * X_beta_h[is_external,]) / (1 - pi_internal)
+    (data_external$tilt_ratios / data_external$y_tilde_denom) * X_beta_h[is_external,]) / (1 - pi_internal)
   hessian[pos_beta_r_et, pos_beta_s] <- (
     t(X_beta_r_external) %*% (data_external$tilt_ratios / data_external$y_tilde_denom * X_beta_s[is_external,]) / (1 - pi_internal) -
     t(X_beta_r_internal) %*% X_beta_s_raw[is_internal,] / pi_internal)
   hessian[pos_beta_r_et, pos_pi_internal] <- colSums(
     (
-      -(1-pi_internal)^(-2) * data$is_external * data$tilt_ratios * (data$y - data$f_h_a) / data$y_tilde_denom +
-      pi_internal^(-2) * data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et))
+      -(1-pi_internal)^(-2) * data$is_external * data$tilt_ratios * (data$y - data$f_h_a) / data$y_tilde_denom
+      + pi_internal^(-2) * data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et))
     ) * X_beta_r
   )
   
@@ -135,7 +135,7 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-30)
   sandwich <- tcrossprod(half_sandwich)
   list(
     sandwich=sandwich,
@@ -188,10 +188,22 @@ drwcls <- function(data) {
   # NOTE: Not currently using weights (\Tilde{\sigma}) for this one
   
   # Tilting Model
-  tilt_mod <- glm(
-    is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
-    family=binomial(), data=data)
+  # Try simpler model if there's a warning
+  tilt_mod <- tryCatch(
+    glm(
+      is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
+      family=binomial(), data=data),
+    warning=function(w) tryCatch(
+      glm(
+        is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+        family=binomial(), data=data),
+      warning=function(w) glm(
+        is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
+        family=binomial(), data=data)
+    )
+  )
   delta <- coef(tilt_mod)
+  tilt_warning <- length(delta) <= 10
   pi_internal <- mean(data$is_internal)
   delta[1] <- delta[1] - log(pi_internal / (1-pi_internal))
   X_delta <- model.matrix(tilt_mod)
@@ -267,7 +279,8 @@ drwcls <- function(data) {
     beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat
+    meat=sandwich_list$meat,
+    tilt_warning=tilt_warning
   )
   results
 }

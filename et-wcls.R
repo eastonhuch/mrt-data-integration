@@ -93,7 +93,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-30)
   sandwich <- tcrossprod(half_sandwich)
   list(
     sandwich=sandwich,
@@ -102,7 +102,8 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   )
 }
 
-etwcls <- function(data, kronecker=FALSE) {
+etwcls <- function(data, pooling_method="full") {
+  # pooling_method can be "full", "kronecker", or "equal"
   beta_r_true <- c(-2, 5)
   
   # Propensity score model
@@ -114,10 +115,22 @@ etwcls <- function(data, kronecker=FALSE) {
   data$w <- data$p_r_hat_a / data$p_h_a
   
   # Tilting
-  tilt_mod <- glm(
-    is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
-    family=binomial(), data=data)
+  # Try simpler model if there's a warning
+  tilt_mod <- tryCatch(
+    glm(
+      is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
+      family=binomial(), data=data),
+    warning=function(w) tryCatch(
+      glm(
+        is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+        family=binomial(), data=data),
+      warning=function(w) glm(
+        is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
+        family=binomial(), data=data)
+    )
+  )
   delta <- coef(tilt_mod)
+  tilt_warning <- length(delta) <= 10
   internal_prop <- mean(data$is_internal)
   delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
   X_delta <- model.matrix(tilt_mod)
@@ -160,7 +173,7 @@ etwcls <- function(data, kronecker=FALSE) {
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   Lambda <- chol2inv(chol(var_beta_r))
   
-  if (kronecker) {
+  if (pooling_method == "kronecker") {
     Lambda_tilde <- matrix(0, nrow=2, ncol=2)
     Lambda_tilde[1, 1] <- Lambda[1, 1]
     Lambda_tilde[2, 1] <- Lambda[3, 1]
@@ -172,7 +185,7 @@ etwcls <- function(data, kronecker=FALSE) {
     beta_r_pooled <- (w1 * beta_r[1:2] + w2 * beta_r[3:4]) / (w_sum)
     kron_mat <- t(Lambda_tilde[1,]) %x% diag(2) + t(Lambda_tilde[2,]) %x% diag(2)
     var_beta_r_pooled <- (kron_mat %*% var_beta_r %*% t(kron_mat)) / w_sum^2
-  } else {
+  } else if (pooling_method == "full") {
     half_d_r <- round(d_r / 2)
     first_half <- 1:half_d_r
     second_half <- (half_d_r+1):(2*half_d_r)
@@ -185,6 +198,16 @@ etwcls <- function(data, kronecker=FALSE) {
     beta_r_pooled <- c(Lambda_sum_inv %*% z_sum)
     Lambda_horiz_sum <- Lambda[first_half,] + Lambda[second_half,]
     var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
+  } else if (pooling_method == "equal") {
+    Lambda_tilde <- diag(2) * 0.5
+    w1 <- sum(Lambda_tilde[,1])
+    w2 <- sum(Lambda_tilde[,2])
+    w_sum <- w1 + w2
+    beta_r_pooled <- (w1 * beta_r[1:2] + w2 * beta_r[3:4]) / (w_sum)
+    kron_mat <- t(Lambda_tilde[1,]) %x% diag(2) + t(Lambda_tilde[2,]) %x% diag(2)
+    var_beta_r_pooled <- (kron_mat %*% var_beta_r %*% t(kron_mat)) / w_sum^2
+  } else {
+    stop("pooling_method must be 'full', 'kronecker', or 'equal'")
   }
   
   se_beta_r_pooled <- sqrt(diag(var_beta_r_pooled))
@@ -200,7 +223,8 @@ etwcls <- function(data, kronecker=FALSE) {
     beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat
+    meat=sandwich_list$meat,
+    tilt_warning=tilt_warning
   )
   results
 }
