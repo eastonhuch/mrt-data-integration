@@ -7,6 +7,7 @@ source("~/Documents/research/mrt-data-integration/generate_data.R")
 source("~/Documents/research/mrt-data-integration/walters-method.R")
 source("~/Documents/research/mrt-data-integration/wcls.R")
 source("~/Documents/research/mrt-data-integration/et-wcls.R")
+source("~/Documents/research/mrt-data-integration/pet-wcls.R")
 source("~/Documents/research/mrt-data-integration/dr-wcls.R")
 require(geepack)
 require(abind)
@@ -22,7 +23,7 @@ require(splines)
 beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
-method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS")
+method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
 
 process_results <- function(model) {
   covered <- (
@@ -77,6 +78,10 @@ simulate_one <- function(n_internal, n_external) {
   model_dr_wcls <- drwcls(dat)
   results_dr_wcls <- process_results(model_dr_wcls)
   
+  # PET-WCLS
+  model_pet_wcls <- petwcls(dat)
+  results_pet_wcls <- process_results(model_pet_wcls)
+  
   # Bind results together
   results <- abind(
     results_wcls_internal,
@@ -88,6 +93,7 @@ simulate_one <- function(n_internal, n_external) {
     results_et_wcls_kron,
     results_et_wcls,
     results_dr_wcls,
+    results_pet_wcls,
     along=3
   )
   dimnames(results)[[3]] <- method_names
@@ -178,7 +184,7 @@ create_pretty_table <- function(result_list) {
 # Run simulation across many sample sizes
 n_replications <- 400
 # sample_sizes <- c(25, 100, 400, 1600, 6400)
-sample_sizes <- c(25)
+sample_sizes <- c(400)
 result_df <- NULL
 results_25_25 <- NULL
 sample_size_pairs <- list(
@@ -189,6 +195,8 @@ sample_size_pairs <- list(
 sample_size_pairs <- list(c(400, 400))
 
 for (sample_size_pair in sample_size_pairs) {
+  n_internal <- sample_size_pair[1]
+  n_external <- sample_size_pair[2]
   results_i <- simulate_all(n_internal, n_external, n_replications)
   result_df_i <- create_pretty_table(results_i)
   if (is.null(result_df)) {
@@ -410,8 +418,8 @@ print_exact_number_nicely <- function(x, digits=1) {
 }
 
 result_table <- result_df %>% filter(
-    `Internal Sample Size` == 25,
-    `External Sample Size` == 25,
+    `Internal Sample Size` == 400,
+    `External Sample Size` == 400,
   ) %>% mutate(
     `True Value (Numeric)` = `True Value`,
     `Relative Efficiency (Numeric)` = `Empirical Relative Efficiency`,
@@ -459,7 +467,7 @@ for (coef_name in coef_names) {
     coef_name_i <- result_table[i, "Coefficient Name"]
     if (coef_name_i == coef_name) {
       if (first_coef_row) {
-        result_table[i, "Coefficient Name"] <- paste0("\\multirow{4}{*}{", coef_name_i, "}") 
+        result_table[i, "Coefficient Name"] <- paste0("\\multirow{10}{*}{", coef_name_i, "}") 
       } else {
         result_table[i, "Coefficient Name"] <- ""
       }
@@ -515,5 +523,5 @@ xtable_results <- xtable(
     include.rownames = FALSE) %>%
   str_replace("&  &  \\\\\\\\ \\n", "&  &  \\\\\\\\\n\\\\hline\n") %>% 
   str_replace("\\\\hline\\n &  &  ", " &  &  ") %>%
-  str_replace("\\n  \\\\multirow\\{4\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{4}{*}{Slope}")
+  str_replace("\\n  \\\\multirow\\{10\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{10}{*}{Slope}")
 cat(xtable_results)
