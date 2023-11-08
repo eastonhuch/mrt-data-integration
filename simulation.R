@@ -455,8 +455,8 @@ print_exact_number_nicely <- function(x, digits=1) {
 }
 
 result_table <- result_df %>% filter(
-    `Internal Sample Size` == 100,
-    `External Sample Size` == 100,
+    `Internal Sample Size` == 400,
+    `External Sample Size` == 400,
   ) %>% mutate(
     `True Value (Numeric)` = `True Value`,
     `Relative Efficiency (Numeric)` = `Empirical Relative Efficiency`,
@@ -553,7 +553,7 @@ result_table <- rbind(rep("", ncol(result_table)), result_table)
 xtable_results <- xtable(
     result_table,
     label="integration:tab:simulation_results",
-    caption="Results from the simulation with 100 individuals in both the internal and external studies. As expected, all methods except WCLS-Pooled generate approximately unbiased estimates. P-WCLS-Pooled is the most efficient estimator for all coefficients except the intercept. All methods except WCLS-Pooled achieve near-nominal coverage, with the two versions of P-WCLS outperforming WCLS in most comparisons."
+    caption="Results from the simulation with 400 individuals in both the internal and external studies. As expected, all methods except WCLS-Pooled generate approximately unbiased estimates. P-WCLS-Pooled is the most efficient estimator for all coefficients except the intercept. All methods except WCLS-Pooled achieve near-nominal coverage, with the two versions of P-WCLS outperforming WCLS in most comparisons."
   ) %>%
   print(
     sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),
