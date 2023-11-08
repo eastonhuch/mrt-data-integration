@@ -5,7 +5,7 @@ petwcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula, beta_
   a <- data$a
   a_centered <- data$a_centered
   is_internal <- data$is_internal
-  is_external <- data$is_internal
+  is_external <- data$is_external
   data_internal <- data[is_internal,]
   data_external <- data[is_external,]
   
@@ -67,7 +67,7 @@ petwcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula, beta_
   # Tilt scores and Hessian
   prop_internal <- mean(is_internal)
   rho <- prop_internal / (1 - prop_internal)
-  p_delta_num <- rho * c(exp(X_delta %*% delta))
+  p_delta_num <- rho * data$raw_tilt_ratios
   p_delta <- p_delta_num / (1 + p_delta_num)
   scores[, pos_delta] <- (is_internal - p_delta) * X_delta
   X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
@@ -177,8 +177,8 @@ petwcls <- function(data) {
   internal_prop <- mean(data$is_internal)
   delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
   X_delta <- model.matrix(tilt_mod)
-  raw_tilt_ratios <- c(exp(X_delta %*% delta))
-  data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
+  data$raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  data$tilt_ratios <- data$is_internal + data$is_external * data$raw_tilt_ratios
   data$w_and_tilt <- data$w * data$tilt_ratios
   
   # beta_hs
@@ -268,4 +268,3 @@ petwcls <- function(data) {
   )
   results
 }
-

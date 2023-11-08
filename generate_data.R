@@ -21,7 +21,9 @@ generate_data <- function(
   }
   r <- x1 <- gen_ar1_matrix()
   x2 <- is_internal * (1 - x1 + 3 * rt(n_obs, dof)) +
-        is_external * (3 * rt(n_obs, dof))
+        is_external * (2.7 * rt(n_obs, dof))
+  # These values make the distributions similar enough that ET-WCLS works but different
+  # enough that you see some differences in efficiency based on the pooling method
   x3 <- -1 + 0.5*x1 - 0.8*x2 + rt(n_obs, dof)
   
   # Plots to check that relationships look right
@@ -93,7 +95,7 @@ generate_data <- function(
 
 # set.seed(20)
 # dat <- generate_data(
-#     t_max=20, dof=10, n_internal=6400, n_external=6400,
+#     t_max=20, dof=10, n_internal=400, n_external=400,
 #     ar_param=0.5, plot_simulated_data=FALSE)
 # plot(dat$x1[dat$is_internal], dat$x2[dat$is_internal])
 # points(dat$x1[dat$is_external], dat$x2[dat$is_external], col=2)

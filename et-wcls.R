@@ -6,7 +6,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   a <- data$a
   a_centered <- data$a_centered
   is_internal <- data$is_internal
-  is_external <- data$is_internal
+  is_external <- data$is_external
   
   # Construct design matrices
   X_alpha_r <- model.matrix(formula(models$p_r), data=data)
@@ -42,20 +42,20 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   # p_r_hat score/hessian
   scores <- matrix(0, nrow=n, ncol=d)
   hessian <- matrix(0, nrow=d, ncol=d)
-  p_r_hat <- 1 / (1 + exp(-c(X_alpha_r %*% alpha_r)))  # Assume logit link
+  p_r_hat <- 1 / (1 + exp(-c(X_alpha_r %*% alpha_r)))
   scores[, pos_alpha_r] <- (a - p_r_hat) * X_alpha_r
   sd_p_r_hat <- sqrt(p_r_hat * (1-p_r_hat))
   X_alpha_r_scaled <- sd_p_r_hat * X_alpha_r
-  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled) # Should this be negative?
+  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled)
   
   # Tilt scores and Hessian
   prop_internal <- mean(is_internal)
   rho <- prop_internal / (1 - prop_internal)
-  p_delta_num <- rho * c(exp(X_delta %*% delta))
+  p_delta_num <- rho * data$raw_tilt_ratios
   p_delta <- p_delta_num / (1 + p_delta_num)
   scores[, pos_delta] <- (is_internal - p_delta) * X_delta
   X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
+  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted)
   
   # WCLS scores and Hessian
   p_r_hat_a <- data$p_r_hat_a
@@ -65,7 +65,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_r_fitted_values <- c(X_beta_r %*% beta_r)
   wcls_resids <- c(y - wcls_h_fitted_values - wcls_r_fitted_values)
-  wcls_weighted_resids <- w * tilt_ratios * wcls_resids
+  wcls_weighted_resids <- w_and_tilt * wcls_resids
   scores[, pos_beta_h] <- wcls_weighted_resids * X_beta_h
   scores[, pos_beta_r] <- wcls_weighted_resids * X_beta_r
   
@@ -82,6 +82,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_r_X_beta_r) * wcls_weighted_resids) %*% p_r_deriv +
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
   
+  # There must be a big problem with this line:
   hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
   
   # Assemble sandwich
@@ -131,21 +132,21 @@ etwcls <- function(data, pooling_method="full") {
   )
   delta <- coef(tilt_mod)
   tilt_warning <- length(delta) <= 10
-  internal_prop <- mean(data$is_internal)
-  delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
+  pi_internal <- mean(data$is_internal)
+  delta[1] <- delta[1] - log(pi_internal / (1-pi_internal))
   X_delta <- model.matrix(tilt_mod)
-  raw_tilt_ratios <- c(exp(X_delta %*% delta))
-  data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
+  data$raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  data$tilt_ratios <- data$is_internal + data$is_external * data$raw_tilt_ratios
   data$w_and_tilt <- data$w * data$tilt_ratios
 
   # WCLS
-  beta_h_formula <- y ~ x1 + x2 + x3 + is_internal + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3)
+  beta_h_formula <- y ~ 0 + I(as.numeric(is_internal)) + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3) + I(as.numeric(is_external)) + I(is_external*x1) + I(is_external*x2) + I(is_external*x3)
   beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
-  beta_r_formula_character <- as.character(update(beta_r_formula, . ~ . + 1))[3]
+  beta_r_formula_character <- as.character(update(beta_r_formula, . ~ .))[3]
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data, weights=w_and_tilt)
-  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
+  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels"))
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_r <- coef(wcls_mod)[-seq(last_beta_h_idx)]
   d_r <- length(beta_r)

@@ -188,16 +188,18 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 loop_start_time <- Sys.time()
-n_replications <- 100
-sample_sizes <- c(25, 100, 400, 1600, 6400)
-# sample_sizes <- c(400)
+n_replications <- 400
 result_df <- NULL
 results_25_25 <- NULL
+sample_sizes <- c(25, 100, 400, 1600, 6400)
 sample_size_pairs <- list(
   c(25, 25), c(100, 100), c(400, 400), c(1600, 1600), c(6400, 6400),
   c(100, 25), c(100, 400), c(100, 1600), c(100, 6400),
   c(25, 100), c(400, 100), c(1600, 100), c(6400, 100)
 )
+# For checking results fast
+# sample_size_pairs <- list(c(100, 100), c(20, 200))
+# n_replications <- 100
 
 for (sample_size_pair in sample_size_pairs) {
   print(sample_size_pair)
@@ -294,6 +296,7 @@ for (coef_counter in seq_along(beta_r_true)) {
   all_ses <- result_df_100_internal %>%
     filter(`Coefficient Name` == coef_name) %>%
     pull(`Empirical Standard Error`)
+    # pull(`Analytical Standard Error`)
   min_se <- min(all_ses)
   max_se <- max(all_ses)
   plot(NULL, type="n", xlim=c(20, 6800), ylim=c(0.5*min_se, 1.2*max_se), log="xy", xaxt="n",
@@ -316,6 +319,7 @@ for (coef_counter in seq_along(beta_r_true)) {
     lines(
       result_df_100_internal_i$`External Sample Size`,
       result_df_100_internal_i$`Empirical Standard Error`,
+      # result_df_100_internal_i$`Analytical Standard Error`,
       col=method_counter
     )
   }
@@ -328,6 +332,7 @@ for (coef_counter in seq_along(beta_r_true)) {
   all_ses <- result_df_100_external %>%
     filter(`Coefficient Name` == coef_name) %>%
     pull(`Empirical Standard Error`)
+    # pull(`Analytical Standard Error`)
   min_se <- min(all_ses)
   max_se <- max(all_ses)
   plot(NULL, type="n", xlim=c(20, 6800), ylim=c(0.5*min_se, 1.2*max_se), log="xy", xaxt="n",
@@ -347,6 +352,7 @@ for (coef_counter in seq_along(beta_r_true)) {
     lines(
       result_df_100_external_i$`Internal Sample Size`,
       result_df_100_external_i$`Empirical Standard Error`,
+      # result_df_100_external_i$`Analytical Standard Error`,
       col=method_counter
     )
   }
@@ -535,7 +541,7 @@ result_table <- result_table %>% select(
 
 colnames(result_table) <- c(
   "\\multirow{2}{*}{\\parbox{1pt}{Coefficient Name}}",
-  "\\multirow{2}{*}{\\parbox{100pt}{True Value}}",
+  "\\multirow{2}{*}{\\parbox{25pt}{True Value}}",
   "\\multirow{2}{*}{\\parbox{1pt}{Method}}",
   "\\multirow{2}{*}{\\parbox{42pt}{Avg\\\\Estimate}}",
   "\\multirow{2}{*}{\\parbox{48pt}{Relative\\\\Efficiency}}",

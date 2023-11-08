@@ -5,7 +5,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   a <- data$a
   a_centered <- data$a_centered
   is_internal <- data$is_internal
-  is_external <- data$is_internal
+  is_external <- data$is_external
 
   # Construct design matrices
   X_alpha_r <- model.matrix(formula(models$p_r), data=data)
@@ -55,7 +55,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   # Tilt scores and Hessian
   if (tilt) {
     prop_internal <- mean(is_internal)
-    rho <- prop_internal / (1 - prop_internal)
+    rho <- (1 - prop_internal) / prop_internal
     p_delta_num <- rho * c(exp(X_delta %*% delta))
     p_delta <- p_delta_num / (1 + p_delta_num)
     scores[, pos_delta] <- (is_internal - p_delta) * X_delta

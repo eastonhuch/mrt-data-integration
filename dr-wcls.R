@@ -88,8 +88,9 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% log_p_s_deriv
   
   # Tilt scores and Hessian
-  rho <- pi_internal / (1 - pi_internal)
-  p_delta_num <- rho * c(exp(X_delta %*% delta))
+  prop_internal <- mean(is_internal)
+  rho <- prop_internal / (1 - prop_internal)
+  p_delta_num <- rho * data$raw_tilt_ratios
   p_delta <- p_delta_num / (1 + p_delta_num)
   scores[, pos_delta] <- (is_internal - p_delta) * X_delta
   X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
@@ -107,9 +108,10 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     (X_beta_s[is_internal]/data_internal$y_tilde_denom - X_beta_s_raw[is_internal,]))
   
   # DRET-WCLS
+  # TODO: Check this!!!
   scores[, pos_beta_r_et] <- (
     data$is_external * data$tilt_ratios * (data$y - data$f_h_a) / (data$y_tilde_denom * (1 - pi_internal)) +
-      data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et) / (pi_internal))
+      data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et)) / pi_internal
   ) * X_beta_r
   hessian[pos_beta_r_et, pos_beta_r_et] <- crossprod(X_beta_r_internal) / pi_internal
   hessian[pos_beta_r_et, pos_delta] <- -t(X_beta_r_external) %*% (
@@ -207,8 +209,8 @@ drwcls <- function(data) {
   pi_internal <- mean(data$is_internal)
   delta[1] <- delta[1] - log(pi_internal / (1-pi_internal))
   X_delta <- model.matrix(tilt_mod)
-  raw_tilt_ratios <- c(exp(X_delta %*% delta))
-  data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
+  data$raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  data$tilt_ratios <- data$is_internal + data$is_external * data$raw_tilt_ratios
   data$w_and_tilt <- data$w * data$tilt_ratios
   
   # DRP-WCLS
@@ -222,7 +224,7 @@ drwcls <- function(data) {
   X_beta_r_internal <- model.matrix(r_formula, data=data_internal)
   XtX_beta_r_internal <- crossprod(X_beta_r_internal)
   X_beta_r_external <- model.matrix(r_formula, data=data_external)
-  beta_r_et <- c(solve(XtX_beta_r_internal/pi_internal, (
+  beta_r_et <- c(solve(XtX_beta_r_internal / pi_internal, (
     (t(X_beta_r_internal) %*% data_internal$wcls_s_causal_effects) / pi_internal +
       (t(X_beta_r_external) %*% (data_external$tilt_ratios * data_external$y_tilde_frac)) / (1 - pi_internal)
   )))
