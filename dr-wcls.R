@@ -227,7 +227,7 @@ drwcls <- function(data) {
   beta_r_et <- c(solve(XtX_beta_r_internal / pi_internal, (
     (t(X_beta_r_internal) %*% data_internal$wcls_s_causal_effects) / pi_internal +
       (t(X_beta_r_external) %*% (data_external$tilt_ratios * data_external$y_tilde_frac)) / (1 - pi_internal)
-  )))
+  ), tol=1e-50))
 
   # Models list
   models <- list(
