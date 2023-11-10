@@ -26,9 +26,11 @@ names(beta_r_true) <- coef_names
 method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
 
 process_results <- function(model) {
+  dof <- model$n - model$p
+  t_quantile <- qt(0.975, dof)
   covered <- (
-    (beta_r_true >= model$beta_r - 1.96 * model$se_beta_r) & 
-      (beta_r_true <= model$beta_r + 1.96 * model$se_beta_r))
+    (beta_r_true >= model$beta_r - t_quantile * model$se_beta_r) & 
+      (beta_r_true <= model$beta_r + t_quantile * model$se_beta_r))
   results <- cbind(
     estimate=model$beta_r,
     se=model$se_beta_r,
@@ -197,6 +199,7 @@ sample_size_pairs <- list(
   c(100, 25), c(100, 400), c(100, 1600), c(100, 6400),
   c(25, 100), c(400, 100), c(1600, 100), c(6400, 100)
 )
+# sample_size_pairs <- list(c(100, 100))
 # For checking results fast
 # sample_size_pairs <- list(c(100, 100), c(20, 200))
 # n_replications <- 100

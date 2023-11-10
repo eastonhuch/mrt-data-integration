@@ -208,6 +208,8 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
     sandwich=sandwich,
     bread=sandwich_list$bread,
     meat=sandwich_list$meat,
+    n=nrow(data),
+    p=nrow(sandwich),
     tilt_warning=FALSE
   )
   results

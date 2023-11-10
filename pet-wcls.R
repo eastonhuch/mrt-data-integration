@@ -264,6 +264,8 @@ petwcls <- function(data) {
     sandwich=sandwich,
     bread=sandwich_list$bread,
     meat=sandwich_list$meat,
+    n=nrow(data),
+    p=nrow(sandwich),
     tilt_warning=tilt_warning
   )
   results
