@@ -5,7 +5,7 @@ random_seed <- 0 # Other seeds are set within function simulate_all()
 set.seed(random_seed)
 setwd("~/School/Research/mrt-data-integration/")
 source("./generate_data.R")
-source("./walters-method.R")
+source("./pwcls.R")
 source("./wcls.R")
 source("./et-wcls.R")
 source("./pet-wcls.R")
@@ -55,15 +55,15 @@ simulate_one <- function(n_internal, n_external) {
   results_wcls_pooled <- process_results(model_wcls_pooled)
 
   # P-WCLS-Internal
-  model_pwcls_internal <- walters_method(dat, internal_only=TRUE)
+  model_pwcls_internal <- pwcls(dat, internal_only=TRUE)
   results_pwcls_internal <- process_results(model_pwcls_internal)
     
   # P-WCLS-Pooled
-  model_pwcls_pooled <- walters_method(dat)
+  model_pwcls_pooled <- pwcls(dat)
   results_pwcls_pooled <- process_results(model_pwcls_pooled)
   
   # P-WCLS-Pooled-OBS
-  model_pwcls_pooled_obs <- walters_method(dat, observational=TRUE)
+  model_pwcls_pooled_obs <- pwcls(dat, observational=TRUE)
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
   # ET-WCLS-Equal

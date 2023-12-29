@@ -1,4 +1,4 @@
-walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=FALSE) {
+pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=FALSE) {
   # Extract some columns
   y <- data_pooled$y
   p_h_a <- data_pooled$p_h_a
@@ -121,7 +121,7 @@ walters_sandwich <- function(data_pooled, data_internal, models, beta_h_formula,
   )
 }
 
-walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
+pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
   # Create data_pooled, data_internal
   if (internal_only) {
     data_pooled <- data[data$is_internal,]
@@ -189,7 +189,7 @@ walters_method <- function(data, internal_only=FALSE, observational=FALSE) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- walters_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational)
+  sandwich_list <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational)
   sandwich <- sandwich_list$sandwich
   pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
   if (observational) pos_beta_r <- length(alpha_h) + pos_beta_r
