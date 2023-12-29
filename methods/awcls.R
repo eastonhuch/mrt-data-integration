@@ -1,4 +1,5 @@
-eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
+# NOTE: This code has not been checked thoroughly; use with caution
+awcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   # Extract some columns
   y <- data$y
   p_h_a <- data$p_h_a
@@ -88,7 +89,7 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   )
 }
 
-eastons_method <- function(data) {
+awcls <- function(data) {
   make_Gamma <- function(gamma_x2) {
     cbind(
       c(1, 0, 0, 0),
@@ -150,7 +151,7 @@ eastons_method <- function(data) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- eastons_sandwich(data, models, beta_h_formula, beta_s_formula)
+  sandwich_list <- awcls_sandwich(data, models, beta_h_formula, beta_s_formula)
   sandwich <- sandwich_list$sandwich
   pos_theta <- seq(
     length(alpha_s) + length(beta_h) + 1,
