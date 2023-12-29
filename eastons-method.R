@@ -79,8 +79,8 @@ eastons_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
-  sandwich <- tcrossprod(half_sandwich)
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
+  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
   list(
     sandwich=sandwich,
     bread=hessian,

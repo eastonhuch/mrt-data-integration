@@ -1,12 +1,15 @@
-wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
+wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FALSE) {
   # Extract some columns
   y <- data$y
   p_h_a <- data$p_h_a
   a <- data$a
   a_centered <- data$a_centered
+  is_internal <- data$is_internal
+  is_external <- data$is_external
 
   # Construct design matrices
   X_alpha_r <- model.matrix(formula(models$p_r), data=data)
+  if (tilt) X_delta <- model.matrix(formula(models$tilt), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
   X_beta_r <- model.matrix(beta_r_formula, data=data)
   X_beta_r_raw <- X_beta_r / a_centered
@@ -15,20 +18,28 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   # Store dimensions
   n <- nrow(X_beta_h)
   d_alpha_r <- ncol(X_alpha_r)
+  if (tilt) d_delta <- ncol(X_delta)
   d_h <- ncol(X_beta_h)
   d_r <- ncol(X_beta_r)
   d_hr <- d_h + d_r
   d <- d_alpha_r + d_h + d_r
+  if (tilt) d <- d + d_delta
   
   # Extract coefficients
   alpha_r <- coef(models$p_r)
+  if (tilt) delta <- coef(models$tilt)
   beta_hr <- coef(models$wcls)
   beta_h <- beta_hr[seq(d_h)]
   beta_r <- beta_hr[seq(d_h+1, d_h+d_r)]
   
   # Construct position vectors
   pos_alpha_r <- seq(d_alpha_r)
-  pos_beta_h <- d_alpha_r + seq(d_h)
+  if (tilt) {
+    pos_delta <- max(pos_alpha_r) + seq(d_delta)
+    pos_beta_h <- max(pos_delta) + seq(d_h)
+  } else {
+    pos_beta_h <- max(pos_alpha_r) + seq(d_h)
+  }
   pos_beta_r <- max(pos_beta_h) + seq(d_r)
   pos_beta_hr <- c(pos_beta_h, pos_beta_r)
   
@@ -39,20 +50,32 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   scores[, pos_alpha_r] <- (a - p_r_hat) * X_alpha_r
   sd_p_r_hat <- sqrt(p_r_hat * (1-p_r_hat))
   X_alpha_r_scaled <- sd_p_r_hat * X_alpha_r
-  hessian[pos_alpha_r, pos_alpha_r] <- -crossprod(X_alpha_r_scaled)
+  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled) # Should this be negative?
   
+  # Tilt scores and Hessian
+  if (tilt) {
+    prop_internal <- mean(is_internal)
+    rho <- (1 - prop_internal) / prop_internal
+    p_delta_num <- rho * c(exp(X_delta %*% delta))
+    p_delta <- p_delta_num / (1 + p_delta_num)
+    scores[, pos_delta] <- (is_internal - p_delta) * X_delta
+    X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
+    hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
+  }
+
   # WCLS scores and Hessian
-  p_r_hat_a <- a*p_r_hat + (1-a)*(1-p_r_hat)
-  w <- p_r_hat_a / p_h_a
+  p_r_hat_a <- data$p_r_hat_a
+  w <- data$w
+  tilt_ratios <- data$tilt_ratios
+  w_and_tilt <- data$w_and_tilt
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_r_fitted_values <- c(X_beta_r %*% beta_r)
   wcls_resids <- c(y - wcls_h_fitted_values - wcls_r_fitted_values)
-  wcls_weighted_resids <- w * wcls_resids
+  wcls_weighted_resids <- w * tilt_ratios * wcls_resids
   scores[, pos_beta_h] <- wcls_weighted_resids * X_beta_h
   scores[, pos_beta_r] <- wcls_weighted_resids * X_beta_r
   
-  sqrt_w <- sqrt(w)
-  X_beta_hr_scaled <- sqrt_w * X_beta_hr
+  X_beta_hr_scaled <- sqrt(w_and_tilt) * X_beta_hr
   GtWG <- crossprod(X_beta_hr_scaled)
   hessian[pos_beta_hr, pos_beta_hr] <- GtWG
 
@@ -63,19 +86,23 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   hessian[pos_beta_hr, pos_alpha_r] <- 
     t(X_beta_hr * wcls_weighted_resids) %*% log_p_r_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_r_X_beta_r) * wcls_weighted_resids) %*% p_r_deriv +
-    t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w)) %*% p_r_deriv
+    t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
 
+  if (tilt) {
+    hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
+  }
+  
   # Assemble sandwich
-  n_users <- max(data$user_id)
-  t_max <- floor(n / n_users)
+  n_users <- length(unique(data$user_id))
+  t_max <- round(n / n_users)
   scores_agg <- apply(
     aperm(
       array(scores, dim = c(t_max, n_users, d)),
       c(2,1,3)),
     MARGIN=c(1,3), FUN=sum)
   meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)))
-  sandwich <- tcrossprod(half_sandwich)
+  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
+  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
   list(
     sandwich=sandwich,
     bread=hessian,
@@ -83,8 +110,8 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   )
 }
 
-wcls <- function(data) {
-  beta_r_true <- c(-5, -1, 0.9, 0.3)
+wcls <- function(data, tilt=FALSE) {
+  beta_r_true <- c(-2, 5)
   
   # Get point estimates
   # Propensity score model
@@ -95,17 +122,31 @@ wcls <- function(data) {
   data$p_r_hat_a <- data$a * data$p_r_hat + (1 - data$a) * (1 - data$p_r_hat)
   data$w <- data$p_r_hat_a / data$p_h_a
   
+  if (tilt) {
+    tilt_mod <- glm(
+      is_internal ~ poly(x1, 2) * I(poly(x2, 2)),
+      family=binomial(), data=data)
+    delta <- coef(tilt_mod)
+    internal_prop <- mean(data$is_internal)
+    delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
+    X_delta <- model.matrix(tilt_mod)
+    raw_tilt_ratios <- c(exp(X_delta %*% delta))
+    data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
+  } else {
+    data$tilt_ratios <- 1
+  }
+  data$w_and_tilt <- data$w * data$tilt_ratios
+
   # WCLS
   beta_h_formula <- y ~ x1 + x2 + x3
-  beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x1^2) + I(a_centered * x1^3)
+  beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
   beta_r_formula_character <- as.character(update(beta_r_formula, . ~ . + 1))[3]
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
-  wcls_mod <- lm(wcls_formula, data=data, weights=w)
+  wcls_mod <- lm(wcls_formula, data=data, weights=w_and_tilt)
   last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_r <- coef(wcls_mod)[-seq(last_beta_h_idx)]
-  data$wcls_r_causal_effects <- c(model.matrix(beta_r_formula, data=data) %*% beta_r) / data$a_centered
   d_r <- length(beta_r)
   
   # Models list
@@ -113,19 +154,21 @@ wcls <- function(data) {
     p_r=p_r_mod,
     wcls=wcls_mod
   )
+  if (tilt) models[["tilt"]] <- tilt_mod
   
   # Total number of parameters
-  vector_estimate <- c(
-    alpha_r,
-    beta_h,
-    beta_r
-  )
+  if (tilt) {
+    vector_estimate <- c(alpha_r, delta, beta_h, beta_r)
+  } else {
+    vector_estimate <- c(alpha_r, beta_h, beta_r)
+  }
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- wcls_sandwich(data, models, beta_h_formula, beta_r_formula)
+  sandwich_list <- wcls_sandwich(data, models, beta_h_formula, beta_r_formula, tilt=tilt)
   sandwich <- sandwich_list$sandwich
   pos_beta_r <- length(alpha_r) + length(beta_h) + seq_along(beta_r)
+  if (tilt) pos_beta_r <- pos_beta_r + length(delta)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   se_beta_r <- sqrt(diag(var_beta_r))
   beta_r_error <- beta_r - beta_r_true
@@ -140,7 +183,10 @@ wcls <- function(data) {
     beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
     bread=sandwich_list$bread,
-    meat=sandwich_list$meat
+    meat=sandwich_list$meat,
+    n=nrow(data),
+    p=nrow(sandwich),
+    tilt_warning=FALSE
   )
   results
 }
