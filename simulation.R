@@ -248,30 +248,30 @@ print(paste("Estimated time for full run:", estimated_time_full))
 # results_25_25 <- simulate_all(25, 25, n_replications)
 
 # Checkpoint result dataframe
-result_df_file <- "./simulation_results.csv"
+result_df_file <- "./results/simulation_results.csv"
 write.csv(result_df, file=result_df_file, row.names=FALSE)
 result_df <- read.csv(result_df_file, check.names=FALSE)
 colnames(result_df) <- colnames(result_df_i)
 
 # # Checkpoint results_25_25
-# results_25_25_file <- "~/Documents/research/mrt-data-integration/results_25_25.RData"
+# results_25_25_file <- "./results/results_25_25.RData"
 # save(results_25_25, file=results_25_25_file)
 # load(results_25_25_file)
 # 
 # # Checkpoint results_100_100
-# results_100_100_file <- "~/Documents/research/mrt-data-integration/results_100_100.RData"
+# results_100_100_file <- "./results/results_100_100.RData"
 # save(results_100_100, file=results_100_100_file)
 # load(results_100_100_file)
 # 
-# results_400_400_file <- "~/Documents/research/mrt-data-integration/results_400_400.RData"
+# results_400_400_file <- "./results/results_400_400.RData"
 # save(results_400_400, file=results_400_400_file)
 # load(results_400_400_file)
 # 
-# results_1600_1600_file <- "~/Documents/research/mrt-data-integration/results_1600_1600.RData"
+# results_1600_1600_file <- "./results/results_1600_1600.RData"
 # save(results_1600_1600, file=results_1600_1600_file)
 # load(results_1600_1600_file)
 # 
-# results_6400_6400_file <- "~/Documents/research/mrt-data-integration/results_6400_6400.RData"
+# results_6400_6400_file <- "./results/results_6400_6400.RData"
 # save(results_6400_6400, file=results_6400_6400_file)
 # load(results_6400_6400_file)
 
@@ -289,7 +289,7 @@ methods_for_se_plot <- c(
   "PET-WCLS"
 )
 # result_df_100_internal <- result_df %>% filter(`Internal Sample Size` == 100)
-# pdf(file="~/Documents/research/mrt-data-integration/sample_size_se.pdf",
+# pdf(file="./figures/sample_size_se.pdf",
 #     width=12, height=2.5)
 # par(mfrow=c(1, 5), mai=c(0.6, 0.7, 0.5, 0.07), cex.main=1.5, cex.axis=1, cex.lab=1.2)
 # plot.new()
@@ -384,7 +384,7 @@ methods_for_se_plot <- c(
 #   Method = fct_reorder(Method, MethodNumber),
 #   Coefficient = fct_reorder(Coefficient, CoefficientNumber)
 # )
-# pdf("~/Documents/research/mrt-data-integration/estimates_100_100.pdf", width=10, height=3)
+# pdf("./figures/estimates_100_100.pdf", width=10, height=3)
 # boxplot_linewidth <- 0.3
 # ggplot() +
 #   geom_boxplot(data=boxplots_100_100_df, aes(x=Coefficient, y=Estimate, fill=Method)) +
@@ -402,7 +402,7 @@ methods_for_se_plot <- c(
 # Plot confidence intervals for first two methods
 # estimates_100_100 <- results_100_100$results[,"estimate",,]
 # 
-# pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
+# pdf("./figures/x1_se_plot.pdf",
 #     width=6.5, height=2.5)
 # par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
 # 
