@@ -394,51 +394,52 @@ ggplot() +
   geom_line(
     data=data.frame(x=c(1.5, 2.5), y=rep(5, 2)),
     aes(x=x, y=y, group=1),
-    linewidth=boxplot_linewidth)
+    linewidth=boxplot_linewidth) +
+  ylim(c(-15, 15))
 dev.off()
 
 # Plot confidence intervals for first two methods
-estimates_100_100 <- results_100_100$results[,"estimate",,]
-
-pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
-    width=6.5, height=2.5)
-par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
-
-dat <- generate_data(n_internal=100000, n_external=100000)
-max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
-x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
-hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
-
-x1_design_matrix <- cbind(1, x1_values)
-plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 1100),
-     xlab=expression(X[1]), ylab="Causal Effect",
-     main="(b) 95% CIs")
-dash_lty <- 2
-x1_plot_method_numbers <- c(1, 3)
-for (method_number in x1_plot_method_numbers) {
-  method_name <- method_names[method_number]
-  method_estimates <- estimates_100_100[,method_name,]
-  method_fitted_values <- x1_design_matrix %*% method_estimates
-  mean_method_fitted_values <- rowMeans(method_fitted_values)
-  lines(x1_values, mean_method_fitted_values, col=method_number)
-  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.0100)), col=method_number, lty=dash_lty)
-  lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
-}
-legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
-
-plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
-     xlab=expression(X[1]), ylab="Standard Error",
-     main="(c) SE Comparison")
-for (method_number in x1_plot_method_numbers) {
-  method_name <- method_names[method_number]
-  method_estimates <- estimates_100_100[,method_name,]
-  method_fitted_values <- x1_design_matrix %*% method_estimates
-  method_ses <- apply(method_fitted_values, MARGIN=1, sd)
-  lines(x1_values, method_ses, col=method_number)
-}
-legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers)
-
-dev.off()
+# estimates_100_100 <- results_100_100$results[,"estimate",,]
+# 
+# pdf("~/Documents/research/mrt-data-integration/x1_se_plot.pdf",
+#     width=6.5, height=2.5)
+# par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
+# 
+# dat <- generate_data(n_internal=100000, n_external=100000)
+# max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
+# x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
+# hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
+# 
+# x1_design_matrix <- cbind(1, x1_values)
+# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 1100),
+#      xlab=expression(X[1]), ylab="Causal Effect",
+#      main="(b) 95% CIs")
+# dash_lty <- 2
+# x1_plot_method_numbers <- c(1, 3)
+# for (method_number in x1_plot_method_numbers) {
+#   method_name <- method_names[method_number]
+#   method_estimates <- estimates_100_100[,method_name,]
+#   method_fitted_values <- x1_design_matrix %*% method_estimates
+#   mean_method_fitted_values <- rowMeans(method_fitted_values)
+#   lines(x1_values, mean_method_fitted_values, col=method_number)
+#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.0100)), col=method_number, lty=dash_lty)
+#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
+# }
+# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
+# 
+# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
+#      xlab=expression(X[1]), ylab="Standard Error",
+#      main="(c) SE Comparison")
+# for (method_number in x1_plot_method_numbers) {
+#   method_name <- method_names[method_number]
+#   method_estimates <- estimates_100_100[,method_name,]
+#   method_fitted_values <- x1_design_matrix %*% method_estimates
+#   method_ses <- apply(method_fitted_values, MARGIN=1, sd)
+#   lines(x1_values, method_ses, col=method_number)
+# }
+# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers)
+# 
+# dev.off()
 
 # Number of warnings by method/sample size
 result_df %>%
