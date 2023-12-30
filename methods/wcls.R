@@ -1,4 +1,4 @@
-wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FALSE) {
+wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balanced=TRUE, tilt=FALSE) {
   # Extract some columns
   y <- data$y
   p_h_a <- data$p_h_a
@@ -46,11 +46,11 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   # p_r_hat score/hessian
   scores <- matrix(0, nrow=n, ncol=d)
   hessian <- matrix(0, nrow=d, ncol=d)
-  p_r_hat <- 1 / (1 + exp(-c(X_alpha_r %*% alpha_r)))  # Assume logit link
+  p_r_hat <- 1 / (1 + exp(-c(X_alpha_r %*% alpha_r)))
   scores[, pos_alpha_r] <- (a - p_r_hat) * X_alpha_r
   sd_p_r_hat <- sqrt(p_r_hat * (1-p_r_hat))
   X_alpha_r_scaled <- sd_p_r_hat * X_alpha_r
-  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled) # Should this be negative?
+  hessian[pos_alpha_r, pos_alpha_r] <- crossprod(X_alpha_r_scaled)
   
   # Tilt scores and Hessian
   if (tilt) {
@@ -60,7 +60,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
     p_delta <- p_delta_num / (1 + p_delta_num)
     scores[, pos_delta] <- (is_internal - p_delta) * X_delta
     X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-    hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
+    hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted)
   }
 
   # WCLS scores and Hessian
@@ -93,29 +93,23 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, tilt=FAL
   }
   
   # Assemble sandwich
-  n_users <- length(unique(data$user_id))
-  t_max <- round(n / n_users)
-  scores_agg <- apply(
-    aperm(
-      array(scores, dim = c(t_max, n_users, d)),
-      c(2,1,3)),
-    MARGIN=c(1,3), FUN=sum)
-  meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
-  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
-  list(
-    sandwich=sandwich,
-    bread=hessian,
-    meat=meat
-  )
+  if (is_balanced) {
+    n_users <- length(unique(data$user_id))
+    t_max <- round(n / n_users)
+    sandwich <- construct_sandwich_balanced(scores, hessian, n_users, t_max, d)
+  } else {
+    sandwich <- construct_sandwich_unbalanced(scores, hessian, data$user_id, n_users, d)
+  }
+
+  sandwich
 }
 
-wcls <- function(data, tilt=FALSE) {
-  beta_r_true <- c(-2, 5)
+wcls <- function(data, beta_r_true, p_r_formula, beta_h_formula, beta_r_formula, is_balanced=TRUE, tilt_formula=NULL) {
   
+  tilt <- !is.null(tilt_formula)
   # Get point estimates
   # Propensity score model
-  p_r_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_r_mod <- glm(p_r_formula, data=data, family=binomial())
   alpha_r <- coef(p_r_mod)
   data$p_r_hat <- predict(p_r_mod, newdata=data, type="response")
   data$a_centered <- data$a - data$p_r_hat
@@ -124,7 +118,7 @@ wcls <- function(data, tilt=FALSE) {
   
   if (tilt) {
     tilt_mod <- glm(
-      is_internal ~ poly(x1, 2) * I(poly(x2, 2)),
+      tilt_formula,
       family=binomial(), data=data)
     delta <- coef(tilt_mod)
     internal_prop <- mean(data$is_internal)
@@ -138,8 +132,6 @@ wcls <- function(data, tilt=FALSE) {
   data$w_and_tilt <- data$w * data$tilt_ratios
 
   # WCLS
-  beta_h_formula <- y ~ x1 + x2 + x3
-  beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
   beta_r_formula_character <- as.character(update(beta_r_formula, . ~ . + 1))[3]
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
@@ -165,8 +157,7 @@ wcls <- function(data, tilt=FALSE) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- wcls_sandwich(data, models, beta_h_formula, beta_r_formula, tilt=tilt)
-  sandwich <- sandwich_list$sandwich
+  sandwich <- wcls_sandwich(data, models, beta_h_formula, beta_r_formula, is_balanced=is_balanced, tilt=tilt)
   pos_beta_r <- length(alpha_r) + length(beta_h) + seq_along(beta_r)
   if (tilt) pos_beta_r <- pos_beta_r + length(delta)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
@@ -182,8 +173,6 @@ wcls <- function(data, tilt=FALSE) {
     beta_r_chi2=beta_r_chi2,
     beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
-    bread=sandwich_list$bread,
-    meat=sandwich_list$meat,
     n=nrow(data),
     p=nrow(sandwich),
     tilt_warning=FALSE

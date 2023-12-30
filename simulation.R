@@ -5,6 +5,7 @@ random_seed <- 0 # Other seeds are set within function simulate_all()
 set.seed(random_seed)
 setwd("~/School/Research/mrt-data-integration/")
 source("./generate_data.R")
+source("./extras/helpers.R")
 source("./methods/pwcls.R")
 source("./methods/wcls.R")
 source("./methods/etwcls.R")
@@ -25,6 +26,9 @@ beta_r_true <- c(-2, 5)
 coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
 method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
+beta_h_formula <- y ~ x1 + x2 + x3
+beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
+a_intercept_formula <- a ~ 1
 
 process_results <- function(model) {
   dof <- model$n - model$p
@@ -47,11 +51,11 @@ simulate_one <- function(n_internal, n_external) {
   
   # WCLS-Internal
   dat_internal <- dat[dat$is_internal, ]
-  model_wcls_internal <- wcls(dat_internal)
+  model_wcls_internal <- wcls(dat_internal, beta_r_true, a_intercept_formula, beta_h_formula, beta_r_formula)
   results_wcls_internal <- process_results(model_wcls_internal)
   
   # WCLS-Pooled
-  model_wcls_pooled <- wcls(dat)
+  model_wcls_pooled <- wcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_r_formula)
   results_wcls_pooled <- process_results(model_wcls_pooled)
 
   # P-WCLS-Internal
