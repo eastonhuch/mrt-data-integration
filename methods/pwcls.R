@@ -5,7 +5,6 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   a <- data_pooled$a
   a_centered <- data_pooled$a_centered
   is_internal <- data_pooled$is_internal
-  x2_internal <- data_pooled$x2[is_internal]
   
   # Construct design matrices
   if (observational) X_alpha_h <- model.matrix(formula(models$p_h), data=data_pooled)
@@ -104,17 +103,17 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
   
   # Assemble sandwich
-  n_users <- max(data_pooled$user_id)
+  n_users <- length(unique(data_pooled$user_id))
   if (is_balanced) {
     t_max <- round(n / n_users)
     sandwich <- construct_sandwich_balanced(scores, hessian, n_users, t_max, d)
   } else {
-    sandwich <- construct_sandwich_unbalanced(scores, hessian, data$user_id, n_users, d)
+    sandwich <- construct_sandwich_unbalanced(scores, hessian, data_pooled$user_id, n_users, d)
   }
   sandwich
 }
 
-pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula, r_formula, internal_only=FALSE, p_h_formula=NULL) {
+pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula, r_formula, internal_only=FALSE, p_h_formula=NULL, is_balanced=TRUE) {
   observational <- !is.null(p_h_formula)
 
   # Create data_pooled, data_internal
@@ -177,7 +176,7 @@ pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational)
+  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational, is_balanced=is_balanced)
   pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
   if (observational) pos_beta_r <- length(alpha_h) + pos_beta_r
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]

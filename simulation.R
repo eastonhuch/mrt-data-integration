@@ -54,11 +54,11 @@ simulate_one <- function(n_internal, n_external) {
   
   # WCLS-Internal
   dat_internal <- dat[dat$is_internal, ]
-  model_wcls_internal <- wcls(dat_internal, beta_r_true, a_intercept_formula, beta_h_formula, beta_r_formula)
+  model_wcls_internal <- wcls(dat_internal, beta_r_true, beta_h_formula, beta_r_formula, p_r_formula=a_intercept_formula)
   results_wcls_internal <- process_results(model_wcls_internal)
   
   # WCLS-Pooled
-  model_wcls_pooled <- wcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_r_formula)
+  model_wcls_pooled <- wcls(dat, beta_r_true, beta_h_formula, beta_r_formula, p_r_formula=a_intercept_formula)
   results_wcls_pooled <- process_results(model_wcls_pooled)
 
   # P-WCLS-Internal
