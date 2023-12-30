@@ -1,4 +1,4 @@
-pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=FALSE) {
+pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=FALSE, is_balanced=TRUE) {
   # Extract some columns
   y <- data_pooled$y
   p_h_a <- data_pooled$p_h_a
@@ -52,19 +52,19 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   
   # p_h_hat score/hessian
   if (observational) {
-    p_h_hat <- 1 / (1 + exp(-c(X_alpha_h %*% alpha_h)))  # Assume logit link
+    p_h_hat <- 1 / (1 + exp(-c(X_alpha_h %*% alpha_h)))
     scores[, pos_alpha_h] <- (a - p_h_hat) * X_alpha_h
     sd_p_h_hat <- sqrt(p_h_hat * (1-p_h_hat))
     X_alpha_h_scaled <- sd_p_h_hat * X_alpha_h
-    hessian[pos_alpha_h, pos_alpha_h] <- crossprod(X_alpha_h_scaled) # Should this be negative?
+    hessian[pos_alpha_h, pos_alpha_h] <- crossprod(X_alpha_h_scaled)
   }
   
   # p_s_hat score/hessian
-  p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))  # Assume logit link
+  p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))
   scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
   sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
   X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
-  hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled) # Should this be negative?
+  hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled)
   
   # WCLS scores and Hessian
   p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
@@ -105,46 +105,37 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   
   # Assemble sandwich
   n_users <- max(data_pooled$user_id)
-  t_max <- floor(n / n_users)
-  scores_agg <- apply(
-    aperm(
-      array(scores, dim = c(t_max, n_users, d)),
-      c(2,1,3)),
-    MARGIN=c(1,3), FUN=sum)
-  meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
-  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
-  list(
-    sandwich=sandwich,
-    bread=hessian,
-    meat=meat
-  )
+  if (is_balanced) {
+    t_max <- round(n / n_users)
+    sandwich <- construct_sandwich_balanced(scores, hessian, n_users, t_max, d)
+  } else {
+    sandwich <- construct_sandwich_unbalanced(scores, hessian, data$user_id, n_users, d)
+  }
+  sandwich
 }
 
-pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
+pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula, r_formula, internal_only=FALSE, p_h_formula=NULL) {
+  observational <- !is.null(p_h_formula)
+
   # Create data_pooled, data_internal
   if (internal_only) {
     data_pooled <- data[data$is_internal,]
   } else {
     data_pooled <- data
-  }
-  
-  # True coefficient vectors
-  beta_s_true <- c(1, 2, -3)
-  beta_r_true <- c(-2, 5)
-  
+  }  
   # Get point estimates
   # p_h
   if (observational) {
     if (internal_only) stop("observational==TRUE and internal_only==TRUE not implemented")
-    p_h_mod <- glm(a ~ 1 + as.numeric(is_internal) + x1 + x2 + x3, data=data_pooled, family=binomial())
+    p_h_mod <- glm(p_h_formula, data=data_pooled, family=binomial())
     alpha_h <- coef(p_h_mod)
+    # Note: This doens't overwrite the true p_h because data_pooled is a copy of the original data
     data_pooled$p_h <- predict(p_h_mod, newdata=data_pooled, type="response")
     data_pooled$p_h_a <- data_pooled$a * data_pooled$p_h + (1 - data_pooled$a) * (1 - data_pooled$p_h)
   }
   
   # p_s
-  p_s_mod <- glm(a ~ 1, data=data_pooled, family=binomial())
+  p_s_mod <- glm(p_s_formula, data=data_pooled, family=binomial())
   alpha_s <- coef(p_s_mod)
   data_pooled$p_s_hat <- predict(p_s_mod, newdata=data_pooled, type="response")
   data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
@@ -152,13 +143,11 @@ pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
   data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
   
   # WCLS
-  beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data_pooled, weights=w)
-  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
+  last_beta_h_idx <- ncol(model.matrix(beta_h_formula, data=data_pooled))
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
   data_pooled$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data_pooled) %*% beta_s) / data_pooled$a_centered
@@ -166,7 +155,6 @@ pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
   
   # beta_r
   data_internal <- data_pooled[data_pooled$is_internal,]
-  r_formula <- wcls_s_causal_effects ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
 
@@ -189,8 +177,7 @@ pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational)
-  sandwich <- sandwich_list$sandwich
+  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational)
   pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
   if (observational) pos_beta_r <- length(alpha_h) + pos_beta_r
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
@@ -206,8 +193,6 @@ pwcls <- function(data, internal_only=FALSE, observational=FALSE) {
     beta_r_chi2=beta_r_chi2,
     beta_r_z_scores=beta_r_z_scores,
     sandwich=sandwich,
-    bread=sandwich_list$bread,
-    meat=sandwich_list$meat,
     n=nrow(data),
     p=nrow(sandwich),
     tilt_warning=FALSE

@@ -27,8 +27,11 @@ coef_names <- c("Intercept", "Slope")
 names(beta_r_true) <- coef_names
 method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
 beta_h_formula <- y ~ x1 + x2 + x3
+beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
 beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
+pwcls_r_formula <- wcls_s_causal_effects ~ x1
 a_intercept_formula <- a ~ 1
+p_h_formula <- a ~ 1 + as.numeric(is_internal) + x1 + x2 + x3
 
 process_results <- function(model) {
   dof <- model$n - model$p
@@ -59,15 +62,15 @@ simulate_one <- function(n_internal, n_external) {
   results_wcls_pooled <- process_results(model_wcls_pooled)
 
   # P-WCLS-Internal
-  model_pwcls_internal <- pwcls(dat, internal_only=TRUE)
+  model_pwcls_internal <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula, internal_only=TRUE)
   results_pwcls_internal <- process_results(model_pwcls_internal)
     
   # P-WCLS-Pooled
-  model_pwcls_pooled <- pwcls(dat)
+  model_pwcls_pooled <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula)
   results_pwcls_pooled <- process_results(model_pwcls_pooled)
   
   # P-WCLS-Pooled-OBS
-  model_pwcls_pooled_obs <- pwcls(dat, observational=TRUE)
+  model_pwcls_pooled_obs <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula, p_h_formula=p_h_formula)
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
   # ET-WCLS-Equal

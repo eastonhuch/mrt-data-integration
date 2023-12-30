@@ -136,7 +136,7 @@ wcls <- function(data, beta_r_true, p_r_formula, beta_h_formula, beta_r_formula,
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data, weights=w_and_tilt)
-  last_beta_h_idx <- ncol(model.matrix(beta_h_formula, data=dat_internal))
+  last_beta_h_idx <- ncol(model.matrix(beta_h_formula, data=data))
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_r <- coef(wcls_mod)[-seq(last_beta_h_idx)]
   d_r <- length(beta_r)
