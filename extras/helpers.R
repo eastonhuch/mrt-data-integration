@@ -15,7 +15,8 @@ construct_sandwich_balanced <- function(scores, hessian, n_users, t_max, d) {
 }
 
 construct_sandwich_unbalanced <- function(scores, hessian, user_ids, n_users, d){
-  meat <- as.matrix(aggregate(scores ~ user_ids, FUN=sum)[, -1])
-  colnames(meat) <- NULL
+  scores_agg <- as.matrix(aggregate(scores ~ user_ids, FUN=sum)[, -1])
+  colnames(scores_agg) <- NULL
+  meat <- crossprod(scores_agg)
   final_sandwich_step(hessian, meat, n_users, d)
 }
