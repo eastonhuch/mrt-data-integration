@@ -1,4 +1,4 @@
-pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, estimate_p_s=TRUE, observational=FALSE, is_balanced=TRUE) {
+pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, wcls_s_causal_effects, X_beta_s_raw, X_beta_s_raw_internal_list, estimate_p_s=TRUE, observational=FALSE, is_balanced=TRUE) {
   # Extract some columns
   y <- data_pooled$y
   p_h_a <- data_pooled$p_h_a
@@ -11,9 +11,8 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   if (estimate_p_s) X_alpha_s <- model.matrix(formula(models$p_s), data=data_pooled)
   X_beta_h <- model.matrix(beta_h_formula, data=data_pooled)
   X_beta_s <- model.matrix(beta_s_formula, data=data_pooled)
-  X_beta_s_raw <- X_beta_s / a_centered # NOTE: This needs to be fixed for 3+ treatment levels
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
-  X_beta_r_internal <- model.matrix(formula(models$r), data=data_internal)
+  X_beta_r_internal <- model.matrix(models$r)
   
   # Store dimensions
   n <- nrow(X_beta_h)
@@ -23,7 +22,8 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   d_s <- ncol(X_beta_s)
   d_hs <- d_h + d_s
   d_r <- ncol(X_beta_r_internal)
-  d <- d_h + d_s + d_r
+  n_estimated_treatment_levels <- ncol(wcls_s_causal_effects)
+  d <- d_h + d_s + d_r * n_estimated_treatment_levels
   if (observational) d <- d + d_alpha_h
   if (estimate_p_s) d <- d + d_alpha_s
   
@@ -33,7 +33,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   beta_hs <- coef(models$wcls)
   beta_h <- beta_hs[seq(d_h)]
   beta_s <- beta_hs[seq(d_h+1, d_h+d_s)]
-  beta_r <- coef(models$r)
+  beta_r <- c(coef(models$r))
   
   # Construct position vectors
   curr_idx <- 0
@@ -48,7 +48,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   pos_beta_h <- curr_idx + seq(d_h)
   pos_beta_s <- max(pos_beta_h) + seq(d_s)
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
-  pos_beta_r <- max(pos_beta_s) + seq(d_r)
+  pos_beta_r <- max(pos_beta_s) + seq(d_r * n_estimated_treatment_levels)
   
   # scores/Hessian
   scores <- matrix(0, nrow=n, ncol=d)
@@ -89,14 +89,15 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
 
   # These have negative signs because I'm using (-A^-1) B (-A^-1) in my sandwich
   if (estimate_p_s) {
-  p_s_hat_a_deriv <- -(2*a-1) * p_s_hat * (1 - p_s_hat)
-  log_p_s_hat_a_deriv <- p_s_hat_a_deriv / p_s_hat_a
-  log_p_s_deriv <- -(1-p_s_hat)
-  p_s_X_beta_s <- p_s_hat * X_beta_s_raw
-  hessian[pos_beta_hs, pos_alpha_s] <- 
-    t(X_beta_hs * wcls_weighted_resids) %*% log_p_s_hat_a_deriv +
-    t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% log_p_s_deriv +
-    t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% log_p_s_deriv
+    # NOTE: This portion only works for binary treatments
+    p_s_hat_a_deriv <- -(2*a-1) * p_s_hat * (1 - p_s_hat)
+    log_p_s_hat_a_deriv <- p_s_hat_a_deriv / p_s_hat_a
+    log_p_s_deriv <- -(1-p_s_hat)
+    p_s_X_beta_s <- p_s_hat * X_beta_s_raw
+    hessian[pos_beta_hs, pos_alpha_s] <- 
+      t(X_beta_hs * wcls_weighted_resids) %*% log_p_s_hat_a_deriv +
+      t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% log_p_s_deriv +
+      t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% log_p_s_deriv
   }
   
   if (observational) {
@@ -107,10 +108,16 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   }
 
   # beta_r score
-  scores[is_internal, pos_beta_r] <- (data_pooled$wcls_s_causal_effects[data_pooled$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
-  hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
-  hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
-  # NOTE: Need to fix X_beta_s_raw for line above for 3+ categories
+  idx_beta_r_j <- 0
+  # FIXME: Need to iterate through subsets of pos_beta_r
+  for (j in seq(n_estimated_treatment_levels)) {
+    X_beta_s_raw_internal_j <- X_beta_s_raw_internal_list[[j]]
+    idx_beta_r_j <- max(idx_beta_r_j) + seq(d_r)
+    pos_beta_r_j <- pos_beta_r[idx_beta_r_j]
+    scores[is_internal, pos_beta_r_j] <- (wcls_s_causal_effects[,j] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
+    hessian[pos_beta_r_j, pos_beta_r_j] <- crossprod(X_beta_r_internal)
+    hessian[pos_beta_r_j, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw_internal_j
+  }
   
   # Assemble sandwich
   n_users <- length(unique(data_pooled$user_id))
@@ -123,7 +130,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   sandwich
 }
 
-pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, p_s_formula=NULL, internal_only=FALSE, p_h_formula=NULL, is_balanced=TRUE) {
+pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, p_s_formula=NULL, internal_only=FALSE, p_h_formula=NULL, is_balanced=TRUE, r_formula_divider_idx=numeric(0)) {
   estimate_p_s <- !is.null(p_s_formula)
   observational <- !is.null(p_h_formula)
 
@@ -168,14 +175,31 @@ pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, 
   last_beta_h_idx <- ncol(model.matrix(beta_h_formula, data=data_pooled))
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
-  # Need to fix this for 3+ treatment levels
-  data_pooled$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data_pooled) %*% beta_s) / data_pooled$a_centered
   d_s <- length(beta_s)
+  wcls_s_causal_effects <- numeric(0)
+  X_beta_s_raw <- model.matrix(beta_s_formula, data=data_pooled)
+  X_beta_s_raw_internal <- X_beta_s_raw[data_pooled$is_internal,]
+  X_beta_s_raw_internal_list <- list()
+  list_counter <- 1
+  r_formula_start_idx <- 1
+  for (divider_idx in c(r_formula_divider_idx, d_s+1)) {
+    j_idx <- seq(r_formula_start_idx, divider_idx-1)
+    a_j_centered <- X_beta_s_raw[, j_idx[1]]  # Assume first column is intercept
+    X_beta_s_raw[, j_idx] <- X_beta_s_raw[, j_idx] / a_j_centered
+    X_beta_s_raw_internal[, j_idx] <- X_beta_s_raw[data_pooled$is_internal, j_idx]
+    X_beta_s_raw_internal_list[[list_counter]] <- X_beta_s_raw_internal[, j_idx]
+    beta_s_j <- beta_s[j_idx]
+    wcls_s_causal_effects_j <- X_beta_s_raw_internal[, j_idx] %*% beta_s_j
+    wcls_s_causal_effects <- cbind(wcls_s_causal_effects, wcls_s_causal_effects_j)
+    r_formula_start_idx <- divider_idx
+    list_counter <- list_counter + 1
+  }
   
   # beta_r
   data_internal <- data_pooled[data_pooled$is_internal,]
-  r_mod <- glm(r_formula, data=data_internal)
-  beta_r <- coef(r_mod)
+  X_beta_r <- model.matrix(update(r_formula, NULL ~ .), data=data_internal)
+  r_mod <- glm(wcls_s_causal_effects ~ 0 + X_beta_r)
+  beta_r <- c(coef(r_mod))  # NOTE: We're flattening a matrix of coefficients here
 
   # Models list
   models <- list(
@@ -193,7 +217,7 @@ pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, 
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, estimate_p_s=estimate_p_s, observational=observational, is_balanced=is_balanced)
+  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, wcls_s_causal_effects, X_beta_s_raw, X_beta_s_raw_internal_list, estimate_p_s=estimate_p_s, observational=observational, is_balanced=is_balanced)
   pos_beta_r <- seq(n_params - d_r + 1, n_params)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   se_beta_r <- sqrt(diag(var_beta_r))
