@@ -173,7 +173,7 @@ wcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, is_balanced=
   se_beta_r <- sqrt(diag(var_beta_r))
   beta_r_error <- beta_r - beta_r_true
   beta_r_z_scores <- beta_r_error / se_beta_r
-  beta_r_chi2 <- beta_r_error %*% solve(var_beta_r, beta_r_error)
+  beta_r_chi2 <- beta_r_error %*% solve(var_beta_r, beta_r_error, tol=1e-30)
   
   results <- list(
     beta_r=beta_r,
