@@ -12,7 +12,6 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
   if (tilt) X_delta <- model.matrix(formula(models$tilt), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
   X_beta_r <- model.matrix(beta_r_formula, data=data)
-  X_beta_r_raw <- X_beta_r / a_centered
   X_beta_hr <- cbind(X_beta_h, X_beta_r)
   
   # Store dimensions
@@ -85,11 +84,13 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
   GtWG <- crossprod(X_beta_hr_scaled)
   hessian[pos_beta_hr, pos_beta_hr] <- GtWG
 
-  p_r_hat_a_deriv <- -(2*a-1) * p_r_hat * (1 - p_r_hat)
-  log_p_r_hat_a_deriv <- p_r_hat_a_deriv / p_r_hat_a
-  p_r_deriv <- -(1-p_r_hat)
-  p_r_X_beta_r <- p_r_hat * X_beta_r_raw
   if (estimate_p_r) {
+    # Note: This doesn't handle the setting of 3+ treatments
+    X_beta_r_raw <- X_beta_r / a_centered
+    p_r_hat_a_deriv <- -(2*a-1) * p_r_hat * (1 - p_r_hat)
+    log_p_r_hat_a_deriv <- p_r_hat_a_deriv / p_r_hat_a
+    p_r_deriv <- -(1-p_r_hat)
+    p_r_X_beta_r <- p_r_hat * X_beta_r_raw
     hessian[pos_beta_hr, pos_alpha_r] <- 
       t(X_beta_hr * wcls_weighted_resids) %*% log_p_r_hat_a_deriv +
       t(cbind(matrix(0, nrow=n, ncol=d_h), -p_r_X_beta_r) * wcls_weighted_resids) %*% p_r_deriv +

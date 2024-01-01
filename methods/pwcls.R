@@ -1,4 +1,4 @@
-pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=FALSE, is_balanced=TRUE) {
+pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, estimate_p_s=TRUE, observational=FALSE, is_balanced=TRUE) {
   # Extract some columns
   y <- data_pooled$y
   p_h_a <- data_pooled$p_h_a
@@ -8,39 +8,44 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   
   # Construct design matrices
   if (observational) X_alpha_h <- model.matrix(formula(models$p_h), data=data_pooled)
-  X_alpha_s <- model.matrix(formula(models$p_s), data=data_pooled)
+  if (estimate_p_s) X_alpha_s <- model.matrix(formula(models$p_s), data=data_pooled)
   X_beta_h <- model.matrix(beta_h_formula, data=data_pooled)
   X_beta_s <- model.matrix(beta_s_formula, data=data_pooled)
-  X_beta_s_raw <- X_beta_s / a_centered
+  X_beta_s_raw <- X_beta_s / a_centered # NOTE: This needs to be fixed for 3+ treatment levels
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
   X_beta_r_internal <- model.matrix(formula(models$r), data=data_internal)
   
   # Store dimensions
   n <- nrow(X_beta_h)
   if (observational) d_alpha_h <- ncol(X_alpha_h)
-  d_alpha_s <- ncol(X_alpha_s)
+  if (estimate_p_s) d_alpha_s <- ncol(X_alpha_s)
   d_h <- ncol(X_beta_h)
   d_s <- ncol(X_beta_s)
   d_hs <- d_h + d_s
   d_r <- ncol(X_beta_r_internal)
-  d <- d_alpha_s + d_h + d_s + d_r
-  if (observational) d <- d_alpha_h + d
+  d <- d_h + d_s + d_r
+  if (observational) d <- d + d_alpha_h
+  if (estimate_p_s) d <- d + d_alpha_s
   
   # Extract coefficients
   if (observational) alpha_h <- coef(models$p_h)
-  alpha_s <- coef(models$p_s)
+  if (estimate_p_s) alpha_s <- coef(models$p_s)
   beta_hs <- coef(models$wcls)
   beta_h <- beta_hs[seq(d_h)]
   beta_s <- beta_hs[seq(d_h+1, d_h+d_s)]
   beta_r <- coef(models$r)
   
   # Construct position vectors
-  pos_alpha_s <- seq(d_alpha_s)
+  curr_idx <- 0
   if (observational) {
     pos_alpha_h <- seq(d_alpha_h)
-    pos_alpha_s <- d_alpha_h + pos_alpha_s
+    curr_idx <- d_alpha_h
   }
-  pos_beta_h <- max(pos_alpha_s) + seq(d_h)
+  if (estimate_p_s) {
+    pos_alpha_s <- curr_idx + seq(d_alpha_s)
+    curr_idx <- curr_idx + d_alpha_s
+  }
+  pos_beta_h <- curr_idx + seq(d_h)
   pos_beta_s <- max(pos_beta_h) + seq(d_s)
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
   pos_beta_r <- max(pos_beta_s) + seq(d_r)
@@ -59,11 +64,13 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   }
   
   # p_s_hat score/hessian
-  p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))
-  scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
-  sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
-  X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
-  hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled)
+  if (estimate_p_s) {
+    p_s_hat <- 1 / (1 + exp(-c(X_alpha_s %*% alpha_s)))
+    scores[, pos_alpha_s] <- (a - p_s_hat) * X_alpha_s
+    sd_p_s_hat <- sqrt(p_s_hat * (1-p_s_hat))
+    X_alpha_s_scaled <- sd_p_s_hat * X_alpha_s
+    hessian[pos_alpha_s, pos_alpha_s] <- crossprod(X_alpha_s_scaled)
+  }
   
   # WCLS scores and Hessian
   p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
@@ -81,6 +88,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   hessian[pos_beta_hs, pos_beta_hs] <- GtWG
 
   # These have negative signs because I'm using (-A^-1) B (-A^-1) in my sandwich
+  if (estimate_p_s) {
   p_s_hat_a_deriv <- -(2*a-1) * p_s_hat * (1 - p_s_hat)
   log_p_s_hat_a_deriv <- p_s_hat_a_deriv / p_s_hat_a
   log_p_s_deriv <- -(1-p_s_hat)
@@ -89,6 +97,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
     t(X_beta_hs * wcls_weighted_resids) %*% log_p_s_hat_a_deriv +
     t(cbind(matrix(0, nrow=n, ncol=d_h), -p_s_X_beta_s) * wcls_weighted_resids) %*% log_p_s_deriv +
     t(X_beta_hs * (p_s_hat * wcls_s_fitted_values / a_centered * w)) %*% log_p_s_deriv
+  }
   
   if (observational) {
     p_h_hat_a_deriv <- -(2*a-1) * p_h_hat * (1 - p_h_hat)
@@ -101,6 +110,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   scores[is_internal, pos_beta_r] <- (data_pooled$wcls_s_causal_effects[data_pooled$is_internal] - c(X_beta_r_internal %*% beta_r)) * X_beta_r_internal
   hessian[pos_beta_r, pos_beta_r] <- crossprod(X_beta_r_internal)
   hessian[pos_beta_r, pos_beta_s] <- -t(X_beta_r_internal) %*% X_beta_s_raw[data_pooled$is_internal,]
+  # NOTE: Need to fix X_beta_s_raw for line above for 3+ categories
   
   # Assemble sandwich
   n_users <- length(unique(data_pooled$user_id))
@@ -113,7 +123,8 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   sandwich
 }
 
-pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula, r_formula, internal_only=FALSE, p_h_formula=NULL, is_balanced=TRUE) {
+pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, p_s_formula=NULL, internal_only=FALSE, p_h_formula=NULL, is_balanced=TRUE) {
+  estimate_p_s <- !is.null(p_s_formula)
   observational <- !is.null(p_h_formula)
 
   # Create data_pooled, data_internal
@@ -134,12 +145,20 @@ pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula
   }
   
   # p_s
-  p_s_mod <- glm(p_s_formula, data=data_pooled, family=binomial())
-  alpha_s <- coef(p_s_mod)
-  data_pooled$p_s_hat <- predict(p_s_mod, newdata=data_pooled, type="response")
+  if (estimate_p_s) {
+    p_s_mod <- glm(p_s_formula, data=data_pooled, family=binomial())
+    alpha_s <- coef(p_s_mod)
+    data_pooled$p_s_hat <- predict(p_s_mod, newdata=data_pooled, type="response")
+    data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
+    data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat)
+    data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
+  } else {
+    data_pooled$p_s_hat <- data_pooled$p_s
+  }
   data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
   data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat)
   data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
+
   
   # WCLS
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
@@ -149,6 +168,7 @@ pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula
   last_beta_h_idx <- ncol(model.matrix(beta_h_formula, data=data_pooled))
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
+  # Need to fix this for 3+ treatment levels
   data_pooled$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data_pooled) %*% beta_s) / data_pooled$a_centered
   d_s <- length(beta_s)
   
@@ -159,26 +179,22 @@ pwcls <- function(data, beta_r_true, p_s_formula, beta_h_formula, beta_s_formula
 
   # Models list
   models <- list(
-    p_s=p_s_mod,
     wcls=wcls_mod,
     r=r_mod
   )
+  if (estimate_p_s) models$p_s <- p_s_mod
   if (observational) models$p_h <- p_h_mod
   
   # Total number of parameters
-  vector_estimate <- c(
-    alpha_s,
-    beta_h,
-    beta_s,
-    beta_r
-  )
-  if (observational) vector_estimate <- c(alpha_h, vector_estimate)
+  vector_estimate <- c()
+  if (observational) vector_estimate <- c(alpha_h)
+  if (estimate_p_s) vector_estimate <- c(vector_estimate, alpha_s)
+  vector_estimate <- c(vector_estimate, beta_h, beta_s, beta_r)
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, observational=observational, is_balanced=is_balanced)
-  pos_beta_r <- length(alpha_s) + length(beta_h) + length(beta_s) + seq_along(beta_r)
-  if (observational) pos_beta_r <- length(alpha_h) + pos_beta_r
+  sandwich <- pwcls_sandwich(data_pooled, data_internal, models, beta_h_formula, beta_s_formula, estimate_p_s=estimate_p_s, observational=observational, is_balanced=is_balanced)
+  pos_beta_r <- seq(n_params - d_r + 1, n_params)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   se_beta_r <- sqrt(diag(var_beta_r))
   beta_r_error <- beta_r - beta_r_true

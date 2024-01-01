@@ -62,15 +62,15 @@ simulate_one <- function(n_internal, n_external) {
   results_wcls_pooled <- process_results(model_wcls_pooled)
 
   # P-WCLS-Internal
-  model_pwcls_internal <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula, internal_only=TRUE)
+  model_pwcls_internal <- pwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, pwcls_r_formula, p_s_formula=a_intercept_formula, internal_only=TRUE)
   results_pwcls_internal <- process_results(model_pwcls_internal)
     
   # P-WCLS-Pooled
-  model_pwcls_pooled <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula)
+  model_pwcls_pooled <- pwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, pwcls_r_formula, p_s_formula=a_intercept_formula)
   results_pwcls_pooled <- process_results(model_pwcls_pooled)
   
   # P-WCLS-Pooled-OBS
-  model_pwcls_pooled_obs <- pwcls(dat, beta_r_true, a_intercept_formula, beta_h_formula, beta_s_formula, pwcls_r_formula, p_h_formula=p_h_formula)
+  model_pwcls_pooled_obs <- pwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, pwcls_r_formula, p_s_formula=a_intercept_formula, p_h_formula=p_h_formula)
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
   # ET-WCLS-Equal
