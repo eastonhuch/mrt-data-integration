@@ -167,7 +167,7 @@ wcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, is_balanced=
   
   # Standard errors
   sandwich <- wcls_sandwich(data, models, beta_h_formula, beta_r_formula, is_balanced=is_balanced, estimate_p_r=estimate_p_r, tilt=tilt)
-  pos_beta_r <- seq(n_params - length(vector_estimate) + 1, n_params)
+  pos_beta_r <- seq(n_params - d_r + 1, n_params)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   se_beta_r <- sqrt(diag(var_beta_r))
   beta_r_error <- beta_r - beta_r_true
