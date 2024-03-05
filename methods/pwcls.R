@@ -75,7 +75,7 @@ pwcls_sandwich <- function(data_pooled, data_internal, models, beta_h_formula, b
   }
   
   # WCLS scores and Hessian
-  p_s_hat_a <- a*p_s_hat + (1-a)*(1-p_s_hat)
+  p_s_hat_a <- data_pooled$p_s_hat_a
   wcls_h_fitted_values <- c(X_beta_h %*% beta_h)
   wcls_s_fitted_values <- c(X_beta_s %*% beta_s)
   wcls_resids <- c(y - wcls_h_fitted_values - wcls_s_fitted_values)
@@ -161,14 +161,24 @@ pwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, 
     alpha_s <- coef(p_s_mod)
     data_pooled$p_s_hat <- predict(p_s_mod, newdata=data_pooled, type="response")
     data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
-    data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat)
-    data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
   } else {
     data_pooled$p_s_hat <- data_pooled$p_s
   }
   data_pooled$a_centered <- data_pooled$a - data_pooled$p_s_hat
-  data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat)
-  data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
+  
+  if (("p_s_a" %in% colnames(data_pooled)) && (!estimate_p_s)) {
+    print("Using known p_s_a")
+    data_pooled$p_s_hat_a <- data_pooled$p_s_a
+  } else {
+    data_pooled$p_s_hat_a <- data_pooled$a * data_pooled$p_s_hat + (1 - data_pooled$a) * (1 - data_pooled$p_s_hat) 
+  }
+
+  if (("wcls_weight" %in% colnames(data_pooled)) && (!estimate_p_s)) {
+    print("Using wcls_weight")
+    data_pooled$w <- data_pooled$wcls_weight
+  } else {
+    data_pooled$w <- data_pooled$p_s_hat_a / data_pooled$p_h_a
+  }
 
   # WCLS
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
