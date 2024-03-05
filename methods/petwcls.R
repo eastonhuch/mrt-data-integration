@@ -138,13 +138,9 @@ petwcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula, beta_
   sandwich
 }
 
-petwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
-  # True coefficient vectors
-  beta_s_true <- c(1, 2, -3)
-  beta_r_true <- c(-2, 5)
-  
+petwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, beta_r_formula, p_s_formula, tilt_formula=NULL, is_balanced=TRUE) {  
   # p_s
-  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_s_mod <- glm(p_s_formula, data=data, family=binomial())
   alpha_s <- coef(p_s_mod)
   data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
   data$a_centered <- data$a - data$p_s_hat
@@ -182,8 +178,6 @@ petwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
   data$w_and_tilt <- data$w * data$tilt_ratios
   
   # beta_hs
-  beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
@@ -195,9 +189,10 @@ petwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
   d_s <- length(beta_s)
 
   # beta_hr
-  beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
   beta_r_formula_character <- as.character(update(beta_r_formula, . ~ . + 1))[3]
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
+  # NOTE: This formula will differ from the one used in ET-WCLS
+  # Whereas the ET-WCLS formula includes different baseline terms for each study, this one does not
   r_wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
   r_wcls_mod <- lm(r_wcls_formula, data=data, weights=w_and_tilt)
   last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
@@ -237,17 +232,17 @@ petwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
   pos_beta_r <- length(alpha_s) + length(omega) + length(beta_h) + length(beta_s) + length(beta_h) + seq(3*d_r)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   Lambda <- chol2inv(chol(var_beta_r))
-  Lambda_sum <- matrix(0, nrow=2, ncol=2)
+  Lambda_sum <- matrix(0, nrow=d_r, ncol=d_r)
   for (j in 1:3) {
     for (k in 1:3) {
-      Lambda_sum <- Lambda_sum + Lambda[2*(j-1)+seq(2), 2*(k-1)+seq(2)]
+      Lambda_sum <- Lambda_sum + Lambda[d_r*(j-1)+seq(d_r), d_r*(k-1)+seq(d_r)]
     }
   }
   Lambda_sum_inv <- chol2inv(chol(Lambda_sum))
   z <- Lambda %*% c(beta_r_wcls, beta_r)
-  z_sum <- z[1:2] + z[3:4] + z[5:6]
+  z_sum <- z[seq(d_r)] + z[d_r + seq(d_r)] + z[2*d_r + seq(d_r)]
   beta_r_pooled <- c(Lambda_sum_inv %*% z_sum)
-  Lambda_horiz_sum <- Lambda[1:2,] + Lambda[3:4,] + Lambda[5:6,]
+  Lambda_horiz_sum <- Lambda[seq(d_r),] + Lambda[d_r + seq(d_r),] + Lambda[2*d_r + seq(d_r),]
   var_beta_r_pooled <- Lambda_sum_inv %*% Lambda_horiz_sum %*% var_beta_r %*% t(Lambda_horiz_sum) %*% Lambda_sum_inv
   se_beta_r_pooled <- sqrt(diag(var_beta_r_pooled))
   beta_r_pooled_error <- beta_r_pooled - beta_r_true

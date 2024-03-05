@@ -139,14 +139,10 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula, is_balance
   sandwich
 }
 
-drwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
-  # True coefficient vectors
-  beta_s_true <- c(1, 2, -3)
-  beta_r_true <- c(-2, 5)
-  
+drwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, p_s_formula, tilt_formula=NULL, is_balanced=TRUE) {
   # Get point estimates
   # p_s
-  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_s_mod <- glm(p_s_formula, data=data, family=binomial())
   alpha_s <- coef(p_s_mod)
   data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
   data$a_centered <- data$a - data$p_s_hat
@@ -154,8 +150,6 @@ drwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
   data$w <- data$p_s_hat_a / data$p_h_a
   
   # S-moderated model
-  beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
@@ -214,15 +208,15 @@ drwcls <- function(data, tilt_formula=NULL, is_balanced=TRUE) {
   
   # DRP-WCLS
   data_internal <- data[data$is_internal,]
-  r_formula <- y_tilde ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
   
   # DRET-WCLS
   data_external <- data[data$is_external,]
-  X_beta_r_internal <- model.matrix(r_formula, data=data_internal)
+  r_formula_updated <- update(r_formula, y_tilde ~ .)
+  X_beta_r_internal <- model.matrix(r_formula_updated, data=data_internal)
   XtX_beta_r_internal <- crossprod(X_beta_r_internal)
-  X_beta_r_external <- model.matrix(r_formula, data=data_external)
+  X_beta_r_external <- model.matrix(r_formula_updated, data=data_external)
   beta_r_et <- c(solve(XtX_beta_r_internal / pi_internal, (
     (t(X_beta_r_internal) %*% data_internal$wcls_s_causal_effects) / pi_internal +
       (t(X_beta_r_external) %*% (data_external$tilt_ratios * data_external$y_tilde_frac)) / (1 - pi_internal)

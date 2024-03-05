@@ -96,12 +96,11 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_bal
   sandwich
 }
 
-etwcls <- function(data, pooling_method="full", tilt_formula=NULL, is_balanced=TRUE) {
+etwcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, p_r_formula, tilt_formula=NULL, pooling_method="full", is_balanced=TRUE) {
   # pooling_method can be "full", "kronecker", or "equal"
-  beta_r_true <- c(-2, 5)
   
   # Propensity score model
-  p_r_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_r_mod <- glm(p_r_formula, data=data, family=binomial())
   alpha_r <- coef(p_r_mod)
   data$p_r_hat <- predict(p_r_mod, newdata=data, type="response")
   data$a_centered <- data$a - data$p_r_hat
@@ -138,8 +137,6 @@ etwcls <- function(data, pooling_method="full", tilt_formula=NULL, is_balanced=T
   data$w_and_tilt <- data$w * data$tilt_ratios
 
   # WCLS
-  beta_h_formula <- y ~ 0 + I(as.numeric(is_internal)) + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3) + I(as.numeric(is_external)) + I(is_external*x1) + I(is_external*x2) + I(is_external*x3)
-  beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
   beta_r_formula_character <- as.character(update(beta_r_formula, . ~ .))[3]
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
