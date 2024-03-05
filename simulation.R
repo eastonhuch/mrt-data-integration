@@ -197,7 +197,7 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 loop_start_time <- Sys.time()
-n_replications <- 400
+n_replications <- 2
 result_df <- NULL
 results_25_25 <- NULL
 sample_sizes <- c(25, 100, 400, 1600, 6400)

@@ -9,7 +9,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
 
   # Construct design matrices
   if (estimate_p_r) X_alpha_r <- model.matrix(formula(models$p_r), data=data)
-  if (tilt) X_delta <- model.matrix(formula(models$tilt), data=data)
+  if (tilt) X_omega <- model.matrix(formula(models$tilt), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
   X_beta_r <- model.matrix(beta_r_formula, data=data)
   X_beta_hr <- cbind(X_beta_h, X_beta_r)
@@ -17,17 +17,17 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
   # Store dimensions
   n <- nrow(X_beta_h)
   if (estimate_p_r) d_alpha_r <- ncol(X_alpha_r)
-  if (tilt) d_delta <- ncol(X_delta)
+  if (tilt) d_omega <- ncol(X_omega)
   d_h <- ncol(X_beta_h)
   d_r <- ncol(X_beta_r)
   d_hr <- d_h + d_r
   d <- d_h + d_r
   if (estimate_p_r) d <- d + d_alpha_r
-  if (tilt) d <- d + d_delta
+  if (tilt) d <- d + d_omega
   
   # Extract coefficients
   if (estimate_p_r) alpha_r <- coef(models$p_r)
-  if (tilt) delta <- coef(models$tilt)
+  if (tilt) omega <- coef(models$tilt)
   beta_hr <- coef(models$wcls)
   beta_h <- beta_hr[seq(d_h)]
   beta_r <- beta_hr[seq(d_h+1, d_h+d_r)]
@@ -39,8 +39,8 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
     curr_idx <- curr_idx + d_alpha_r
   }
   if (tilt) {
-    pos_delta <- curr_idx + seq(d_delta)
-    curr_idx <- curr_idx + d_delta
+    pos_omega <- curr_idx + seq(d_omega)
+    curr_idx <- curr_idx + d_omega
   }
   pos_beta_h <- curr_idx + seq(d_h)
   pos_beta_r <- max(pos_beta_h) + seq(d_r)
@@ -61,11 +61,11 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
   if (tilt) {
     prop_internal <- mean(is_internal)
     rho <- (1 - prop_internal) / prop_internal
-    p_delta_num <- rho * c(exp(X_delta %*% delta))
-    p_delta <- p_delta_num / (1 + p_delta_num)
-    scores[, pos_delta] <- (is_internal - p_delta) * X_delta
-    X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-    hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted)
+    p_omega_num <- rho * c(exp(X_omega %*% omega))
+    p_omega <- p_omega_num / (1 + p_omega_num)
+    scores[, pos_omega] <- (is_internal - p_omega) * X_omega
+    X_omega_weighted <- X_omega * sqrt(p_omega * (1 - p_omega))
+    hessian[pos_omega, pos_omega] <- crossprod(X_omega_weighted)
   }
 
   # WCLS scores and Hessian
@@ -98,7 +98,7 @@ wcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balan
   }
 
   if (tilt) {
-    hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
+    hessian[pos_beta_hr, pos_omega] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_omega
   }
   
   # Assemble sandwich
@@ -138,11 +138,11 @@ wcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, is_balanced=
     tilt_mod <- glm(
       tilt_formula,
       family=binomial(), data=data)
-    delta <- coef(tilt_mod)
+    omega <- coef(tilt_mod)
     internal_prop <- mean(data$is_internal)
-    delta[1] <- delta[1] - log(internal_prop / (1-internal_prop))
-    X_delta <- model.matrix(tilt_mod)
-    raw_tilt_ratios <- c(exp(X_delta %*% delta))
+    omega[1] <- omega[1] - log(internal_prop / (1-internal_prop))
+    X_omega <- model.matrix(tilt_mod)
+    raw_tilt_ratios <- c(exp(X_omega %*% omega))
     data$tilt_ratios <- data$is_internal + data$is_external * raw_tilt_ratios
   } else {
     data$tilt_ratios <- 1
@@ -166,7 +166,7 @@ wcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, is_balanced=
   
   # Total number of parameters
   vector_estimate <- c(beta_h, beta_r)
-  if (tilt) vector_estimate <- c(delta, vector_estimate)
+  if (tilt) vector_estimate <- c(omega, vector_estimate)
   if (estimate_p_r) vector_estimate <- c(alpha_r, vector_estimate)
   n_params <- length(vector_estimate)
   

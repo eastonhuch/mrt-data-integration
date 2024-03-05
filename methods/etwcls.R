@@ -1,8 +1,7 @@
 # Need to update below function to account for uncertainty in tilt
-etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
+etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula, is_balanced=TRUE) {
   # Extract some columns
   y <- data$y
-  p_h_a <- data$p_h_a
   a <- data$a
   a_centered <- data$a_centered
   is_internal <- data$is_internal
@@ -10,7 +9,7 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   
   # Construct design matrices
   X_alpha_r <- model.matrix(formula(models$p_r), data=data)
-  X_delta <- model.matrix(formula(models$tilt), data=data)
+  X_omega <- model.matrix(formula(models$tilt), data=data)
   X_beta_h <- model.matrix(beta_h_formula, data=data)
   X_beta_r <- model.matrix(beta_r_formula, data=data)
   X_beta_r_raw <- X_beta_r / a_centered
@@ -19,23 +18,23 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   # Store dimensions
   n <- nrow(X_beta_h)
   d_alpha_r <- ncol(X_alpha_r)
-  d_delta <- ncol(X_delta)
+  d_omega <- ncol(X_omega)
   d_h <- ncol(X_beta_h)
   d_r <- ncol(X_beta_r)
   d_hr <- d_h + d_r
-  d <- d_alpha_r + d_delta + d_h + d_r
+  d <- d_alpha_r + d_omega + d_h + d_r
   
   # Extract coefficients
   alpha_r <- coef(models$p_r)
-  delta <- coef(models$tilt)
+  omega <- coef(models$tilt)
   beta_hr <- coef(models$wcls)
   beta_h <- beta_hr[seq(d_h)]
   beta_r <- beta_hr[seq(d_h+1, d_h+d_r)]
   
   # Construct position vectors
   pos_alpha_r <- seq(d_alpha_r)
-  pos_delta <- d_alpha_r + seq(d_delta)
-  pos_beta_h <- max(pos_delta) + seq(d_h)
+  pos_omega <- d_alpha_r + seq(d_omega)
+  pos_beta_h <- max(pos_omega) + seq(d_h)
   pos_beta_r <- max(pos_beta_h) + seq(d_r)
   pos_beta_hr <- c(pos_beta_h, pos_beta_r)
   
@@ -51,11 +50,11 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
   # Tilt scores and Hessian
   prop_internal <- mean(is_internal)
   rho <- prop_internal / (1 - prop_internal)
-  p_delta_num <- rho * data$raw_tilt_ratios
-  p_delta <- p_delta_num / (1 + p_delta_num)
-  scores[, pos_delta] <- (is_internal - p_delta) * X_delta
-  X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted)
+  p_omega_num <- rho * data$raw_tilt_ratios
+  p_omega <- p_omega_num / (1 + p_omega_num)
+  scores[, pos_omega] <- (is_internal - p_omega) * X_omega
+  X_omega_weighted <- X_omega * sqrt(p_omega * (1 - p_omega))
+  hessian[pos_omega, pos_omega] <- crossprod(X_omega_weighted)
   
   # WCLS scores and Hessian
   p_r_hat_a <- data$p_r_hat_a
@@ -83,27 +82,21 @@ etwcls_sandwich <- function(data, models, beta_h_formula, beta_r_formula) {
     t(X_beta_hr * (p_r_hat * wcls_r_fitted_values / a_centered * w * tilt_ratios)) %*% p_r_deriv
   
   # There must be a big problem with this line:
-  hessian[pos_beta_hr, pos_delta] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_delta
+  hessian[pos_beta_hr, pos_omega] <- -t(is_external * wcls_weighted_resids * X_beta_hr) %*% X_omega
   
   # Assemble sandwich
-  n_users <- max(data$user_id)
-  t_max <- floor(n / n_users)
-  scores_agg <- apply(
-    aperm(
-      array(scores, dim = c(t_max, n_users, d)),
-      c(2,1,3)),
-    MARGIN=c(1,3), FUN=sum)
-  meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
-  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
-  list(
-    sandwich=sandwich,
-    bread=hessian,
-    meat=meat
-  )
+  n_users <- length(unique(data$user_id))
+  if (is_balanced) {
+    t_max <- round(n / n_users)
+    sandwich <- construct_sandwich_balanced(scores, hessian, n_users, t_max, d)
+  } else {
+    sandwich <- construct_sandwich_unbalanced(scores, hessian, data$user_id, n_users, d)
+  }
+
+  sandwich
 }
 
-etwcls <- function(data, pooling_method="full") {
+etwcls <- function(data, pooling_method="full", tilt_formula=NULL, is_balanced=TRUE) {
   # pooling_method can be "full", "kronecker", or "equal"
   beta_r_true <- c(-2, 5)
   
@@ -117,25 +110,30 @@ etwcls <- function(data, pooling_method="full") {
   
   # Tilting
   # Try simpler model if there's a warning
-  tilt_mod <- tryCatch(
-    glm(
-      is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
-      family=binomial(), data=data),
-    warning=function(w) tryCatch(
+  if (is.null(tilt_formula)) {
+    tilt_mod <- tryCatch(
       glm(
-        is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+        is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
         family=binomial(), data=data),
-      warning=function(w) glm(
-        is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
-        family=binomial(), data=data)
+      warning=function(w) tryCatch(
+        glm(
+          is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+          family=binomial(), data=data),
+        warning=function(w) glm(
+          is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
+          family=binomial(), data=data)
+      )
     )
-  )
-  delta <- coef(tilt_mod)
-  tilt_warning <- length(delta) <= 10
+    tilt_warning <- length(coef(tilt_mod)) <= 10
+  } else {
+    tilt_mod <- glm(tilt_formula, family=binomial(), data=data)
+    tilt_warning <- FALSE
+  }
+  omega <- coef(tilt_mod)
   pi_internal <- mean(data$is_internal)
-  delta[1] <- delta[1] - log(pi_internal / (1-pi_internal))
-  X_delta <- model.matrix(tilt_mod)
-  data$raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  omega[1] <- omega[1] - log(pi_internal / (1-pi_internal))
+  X_omega <- model.matrix(tilt_mod)
+  data$raw_tilt_ratios <- c(exp(X_omega %*% omega))
   data$tilt_ratios <- data$is_internal + data$is_external * data$raw_tilt_ratios
   data$w_and_tilt <- data$w * data$tilt_ratios
 
@@ -161,16 +159,14 @@ etwcls <- function(data, pooling_method="full") {
   # Total number of parameters
   vector_estimate <- c(
     alpha_r,
-    delta,
+    omega,
     beta_h,
     beta_r
   )
-  n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- etwcls_sandwich(data, models, beta_h_formula, beta_r_formula)
-  sandwich <- sandwich_list$sandwich
-  pos_beta_r <- length(alpha_r) + length(delta) + length(beta_h) + seq_along(beta_r)
+  sandwich <- etwcls_sandwich(data, models, beta_h_formula, beta_r_formula, is_balanced=is_balanced)
+  pos_beta_r <- length(alpha_r) + length(omega) + length(beta_h) + seq_along(beta_r)
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   Lambda <- chol2inv(chol(var_beta_r))
   
@@ -223,8 +219,6 @@ etwcls <- function(data, pooling_method="full") {
     beta_r_chi2=beta_r_pooled_chi2,
     beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
-    bread=sandwich_list$bread,
-    meat=sandwich_list$meat,
     n=nrow(data),
     p=nrow(sandwich),
     tilt_warning=tilt_warning
