@@ -141,7 +141,8 @@ etwcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, p_r_formul
   beta_r_formula_symbol <- rlang::parse_expr(beta_r_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data, weights=w_and_tilt)
-  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels"))
+  X_h <- model.matrix(beta_h_formula, data=data)
+  last_beta_h_idx <- ncol(X_h)
   beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
   beta_r <- coef(wcls_mod)[-seq(last_beta_h_idx)]
   d_r <- length(beta_r)
