@@ -128,7 +128,11 @@ wcls <- function(data, beta_r_true, beta_h_formula, beta_r_formula, is_balanced=
   }
   data$a_centered <- data$a - data$p_r_hat
   data$p_r_hat_a <- data$a * data$p_r_hat + (1 - data$a) * (1 - data$p_r_hat)
-  data$w <- data$p_r_hat_a / data$p_h_a
+  if ("wcls_weight" %in% colnames(data)) {
+    data$w <- data$wcls_weight
+  } else {
+    data$w <- data$p_r_hat_a / data$p_h_a 
+  }
   
   if (tilt) {
     tilt_mod <- glm(
