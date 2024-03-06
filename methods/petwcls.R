@@ -138,7 +138,7 @@ petwcls_sandwich <- function(data, models, beta_h_formula, beta_s_formula, beta_
   sandwich
 }
 
-petwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, beta_r_formula, p_s_formula, tilt_formula=NULL, is_balanced=TRUE) {  
+petwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, beta_r_formula, pwcls_r_formula, p_s_formula, tilt_formula=NULL, is_balanced=TRUE) {  
   # p_s
   p_s_mod <- glm(p_s_formula, data=data, family=binomial())
   alpha_s <- coef(p_s_mod)
@@ -182,9 +182,10 @@ petwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, beta_r_fo
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
   wcls_mod <- lm(wcls_formula, data=data, weights=w)
-  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
-  beta_h <- coef(wcls_mod)[ seq(last_beta_h_idx)]
-  beta_s <- coef(wcls_mod)[-seq(last_beta_h_idx)]
+  X_h <- model.matrix(beta_h_formula, data=data)
+  d_h <- ncol(X_h)
+  beta_h <- coef(wcls_mod)[ seq(d_h)]
+  beta_s <- coef(wcls_mod)[-seq(d_h)]
   data$wcls_s_causal_effects <- c(model.matrix(beta_s_formula, data=data) %*% beta_s) / data$a_centered
   d_s <- length(beta_s)
 
@@ -195,14 +196,13 @@ petwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, beta_r_fo
   # Whereas the ET-WCLS formula includes different baseline terms for each study, this one does not
   r_wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_r_formula_symbol)))
   r_wcls_mod <- lm(r_wcls_formula, data=data, weights=w_and_tilt)
-  last_beta_h_idx <- length(attr(terms(beta_h_formula), "term.labels")) + 1
-  beta_h_r_wcls <- coef(r_wcls_mod)[ seq(last_beta_h_idx)]
-  beta_r_wcls <- coef(r_wcls_mod)[-seq(last_beta_h_idx)]
+  beta_h_r_wcls <- coef(r_wcls_mod)[ seq(d_h)]
+  beta_r_wcls <- coef(r_wcls_mod)[-seq(d_h)]
   
   # beta_r
   data_internal <- data[data$is_internal,]
-  r_formula <- wcls_s_causal_effects ~ x1
-  r_mod <- glm(r_formula, data=data_internal)
+  pwcls_r_formula <- update(pwcls_r_formula, wcls_s_causal_effects ~ .)
+  r_mod <- glm(pwcls_r_formula, data=data_internal)
   beta_r <- coef(r_mod)
   d_r <- length(beta_r)
   
