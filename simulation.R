@@ -28,6 +28,8 @@ method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Poo
 beta_h_formula <- y ~ x1 + x2 + x3
 beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
 beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
+et_beta_h_formula <- y ~ 0 + I(as.numeric(is_internal)) + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3) + I(as.numeric(is_external)) + I(is_external*x1) + I(is_external*x2) + I(is_external*x3)
+et_beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
 pwcls_r_formula <- wcls_s_causal_effects ~ x1
 a_intercept_formula <- a ~ 1
 p_h_formula <- a ~ 1 + as.numeric(is_internal) + x1 + x2 + x3
@@ -73,23 +75,23 @@ simulate_one <- function(n_internal, n_external) {
   results_pwcls_pooled_obs <- process_results(model_pwcls_pooled_obs)
 
   # ET-WCLS-Equal
-  model_et_wcls_equal <- etwcls(dat, pooling_method="equal")
+  model_et_wcls_equal <- etwcls(dat, beta_r_true, et_beta_h_formula, et_beta_r_formula, a_intercept_formula, pooling_method="equal")
   results_et_wcls_equal <- process_results(model_et_wcls_equal)
   
   # ET-WCLS-Kron
-  model_et_wcls_kron <- etwcls(dat, pooling_method="kronecker")
+  model_et_wcls_kron <- etwcls(dat, beta_r_true, et_beta_h_formula, et_beta_r_formula, a_intercept_formula, pooling_method="kronecker")
   results_et_wcls_kron <- process_results(model_et_wcls_kron)
 
   # ET-WCLS
-  model_et_wcls <- etwcls(dat, pooling_method="full")
+  model_et_wcls <- etwcls(dat, beta_r_true, et_beta_h_formula, et_beta_r_formula, a_intercept_formula, pooling_method="full")
   results_et_wcls <- process_results(model_et_wcls)
   
   # DR-WCLS
-  model_dr_wcls <- drwcls(dat)
+  model_dr_wcls <- drwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, pwcls_r_formula, a_intercept_formula)
   results_dr_wcls <- process_results(model_dr_wcls)
   
   # PET-WCLS
-  model_pet_wcls <- petwcls(dat)
+  model_pet_wcls <- petwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, et_beta_r_formula, pwcls_r_formula, a_intercept_formula)
   results_pet_wcls <- process_results(model_pet_wcls)
   
   # Bind results together
@@ -605,11 +607,11 @@ make_table <- function(table_sample_size, method_vector=method_names) {
   )
   
   colnames(result_table) <- c(
-    "\\multirow{2}{*}{\\parbox{1pt}{Coefficient Name}}",
-    "\\multirow{2}{*}{\\parbox{25pt}{True Value}}",
+    "\\multirow{2}{*}{\\parbox{1pt}{Coefficient name}}",
+    "\\multirow{2}{*}{\\parbox{25pt}{True value}}",
     "\\multirow{2}{*}{\\parbox{1pt}{Method}}",
-    "\\multirow{2}{*}{\\parbox{42pt}{Avg\\\\Estimate}}",
-    "\\multirow{2}{*}{\\parbox{48pt}{Relative\\\\Efficiency}}",
+    "\\multirow{2}{*}{\\parbox{42pt}{Avg\\\\estimate}}",
+    "\\multirow{2}{*}{\\parbox{48pt}{Relative\\\\efficiency}}",
     "\\multirow{2}{*}{\\parbox{28pt}{rMSE}}",
     "\\multirow{2}{*}{\\parbox{40pt}{Coverage}}"
   )
@@ -622,12 +624,14 @@ make_table <- function(table_sample_size, method_vector=method_names) {
       "Results from the simulation with",
       table_sample_size,
       "individuals in both the internal and external studies.
-For the Avg Estimate and Coverage columns, the boldface indicates values within Monte Carlo error ($3\\sigma$) of the truth.
-For the Relative Efficiency and rMSE columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases)."
+For the ``Avg estimate'' and ``Coverage'' columns, the boldface indicates values within Monte Carlo error ($3\\sigma$) of the truth.
+For the ``Relative efficiency'' and ``rMSE'' columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases)."
       )
     ) %>% print(
       sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),
-      include.rownames = FALSE) %>%
+      include.rownames = FALSE,
+      table.placement=NULL,
+      floating.environment = "table*") %>%
     str_replace("&  &  \\\\\\\\ \\n", "&  &  \\\\\\\\\n\\\\hline\n") %>% 
     str_replace("\\\\hline\\n &  &  ", " &  &  ") %>%
     str_replace("\\n  \\\\multirow\\{10\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{10}{*}{Slope}")

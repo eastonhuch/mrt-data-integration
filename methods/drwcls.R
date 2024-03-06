@@ -1,4 +1,4 @@
-dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
+dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula, is_balanced=TRUE) {
   # Extract some columns
   data_internal <- data[data$is_internal,]
   data_external <- data[data$is_external,]
@@ -15,7 +15,7 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   X_beta_s <- model.matrix(beta_s_formula, data=data)
   X_beta_s_raw <- X_beta_s / a_centered
   X_beta_hs <- cbind(X_beta_h, X_beta_s)
-  X_delta <- model.matrix(formula(models$tilt), data=data)
+  X_omega <- model.matrix(formula(models$tilt), data=data)
   X_beta_r_internal <- model.matrix(formula(models$r), data=data_internal)
   X_beta_r_external <- model.matrix(formula(models$r), data=data_external)
   X_beta_r <- model.matrix(formula(models$r), data=data)
@@ -26,17 +26,17 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   d_h <- ncol(X_beta_h)
   d_s <- ncol(X_beta_s)
   d_hs <- d_h + d_s
-  d_delta <- ncol(X_delta)
+  d_omega <- ncol(X_omega)
   d_pi_internal <- 1
   d_r <- ncol(X_beta_r_internal)
-  d <- d_alpha_s + d_h + d_s + d_delta + d_pi_internal + 2 * d_r
+  d <- d_alpha_s + d_h + d_s + d_omega + d_pi_internal + 2 * d_r
   
   # Extract coefficients
   alpha_s <- coef(models$p_s)
   beta_hs <- coef(models$wcls)
   beta_h <- beta_hs[seq(d_h)]
   beta_s <- beta_hs[seq(d_h+1, d_h+d_s)]
-  delta <- coef(models$tilt)
+  omega <- coef(models$tilt)
   pi_internal <- models$pi_internal
   beta_r <- coef(models$r)
   beta_r_et <- models$r_et
@@ -46,8 +46,8 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   pos_beta_h <- max(pos_alpha_s) + seq(d_h)
   pos_beta_s <- max(pos_beta_h) + seq(d_s)
   pos_beta_hs <- c(pos_beta_h, pos_beta_s)
-  pos_delta <- max(pos_beta_hs) + seq(d_delta)
-  pos_pi_internal <- max(pos_delta) + 1
+  pos_omega <- max(pos_beta_hs) + seq(d_omega)
+  pos_pi_internal <- max(pos_omega) + 1
   pos_beta_r <- max(pos_pi_internal) + seq(d_r)
   pos_beta_r_et <- max(pos_beta_r) + seq(d_r)
   
@@ -90,11 +90,11 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   # Tilt scores and Hessian
   prop_internal <- mean(is_internal)
   rho <- prop_internal / (1 - prop_internal)
-  p_delta_num <- rho * data$raw_tilt_ratios
-  p_delta <- p_delta_num / (1 + p_delta_num)
-  scores[, pos_delta] <- (is_internal - p_delta) * X_delta
-  X_delta_weighted <- X_delta * sqrt(p_delta * (1 - p_delta))
-  hessian[pos_delta, pos_delta] <- crossprod(X_delta_weighted) # Should this be negative?
+  p_omega_num <- rho * data$raw_tilt_ratios
+  p_omega <- p_omega_num / (1 + p_omega_num)
+  scores[, pos_omega] <- (is_internal - p_omega) * X_omega
+  X_omega_weighted <- X_omega * sqrt(p_omega * (1 - p_omega))
+  hessian[pos_omega, pos_omega] <- crossprod(X_omega_weighted) # Should this be negative?
   
   # pi_internal scores and Hessian
   scores[, pos_pi_internal] <- data$is_internal - pi_internal
@@ -108,14 +108,13 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
     (X_beta_s[is_internal]/data_internal$y_tilde_denom - X_beta_s_raw[is_internal,]))
   
   # DRET-WCLS
-  # TODO: Check this!!!
   scores[, pos_beta_r_et] <- (
     data$is_external * data$tilt_ratios * (data$y - data$f_h_a) / (data$y_tilde_denom * (1 - pi_internal)) +
       data$is_internal * (data$f_h_1 - data$f_h_0 - c(X_beta_r %*% beta_r_et)) / pi_internal
   ) * X_beta_r
   hessian[pos_beta_r_et, pos_beta_r_et] <- crossprod(X_beta_r_internal) / pi_internal
-  hessian[pos_beta_r_et, pos_delta] <- -t(X_beta_r_external) %*% (
-    data_external$tilt_ratios * data_external$y_tilde_frac * X_delta[is_external,]) / (1 - pi_internal)
+  hessian[pos_beta_r_et, pos_omega] <- -t(X_beta_r_external) %*% (
+    data_external$tilt_ratios * data_external$y_tilde_frac * X_omega[is_external,]) / (1 - pi_internal)
   hessian[pos_beta_r_et, pos_beta_h] <- t(X_beta_r_external) %*% (
     (data_external$tilt_ratios / data_external$y_tilde_denom) * X_beta_h[is_external,]) / (1 - pi_internal)
   hessian[pos_beta_r_et, pos_beta_s] <- (
@@ -129,31 +128,21 @@ dr_sandwich <- function(data, models, beta_h_formula, beta_s_formula) {
   )
   
   # Assemble sandwich
-  n_users <- max(data$user_id)
-  t_max <- floor(n / n_users)
-  scores_agg <- apply(
-    aperm(
-      array(scores, dim = c(t_max, n_users, d)),
-      c(2,1,3)),
-    MARGIN=c(1,3), FUN=sum)
-  meat <- crossprod(scores_agg)
-  half_sandwich <- solve(hessian, t(chol(meat)), tol=1e-50)
-  sandwich <- tcrossprod(half_sandwich) * n / (n-d)
-  list(
-    sandwich=sandwich,
-    bread=hessian,
-    meat=meat
-  )
+  n_users <- length(unique(data$user_id))
+  if (is_balanced) {
+    t_max <- round(n / n_users)
+    sandwich <- construct_sandwich_balanced(scores, hessian, n_users, t_max, d)
+  } else {
+    sandwich <- construct_sandwich_unbalanced(scores, hessian, data$user_id, n_users, d)
+  }
+
+  sandwich
 }
 
-drwcls <- function(data) {
-  # True coefficient vectors
-  beta_s_true <- c(1, 2, -3)
-  beta_r_true <- c(-2, 5)
-  
+drwcls <- function(data, beta_r_true, beta_h_formula, beta_s_formula, r_formula, p_s_formula, tilt_formula=NULL, is_balanced=TRUE) {
   # Get point estimates
   # p_s
-  p_s_mod <- glm(a ~ 1, data=data, family=binomial())
+  p_s_mod <- glm(p_s_formula, data=data, family=binomial())
   alpha_s <- coef(p_s_mod)
   data$p_s_hat <- predict(p_s_mod, newdata=data, type="response")
   data$a_centered <- data$a - data$p_s_hat
@@ -161,8 +150,6 @@ drwcls <- function(data) {
   data$w <- data$p_s_hat_a / data$p_h_a
   
   # S-moderated model
-  beta_h_formula <- y ~ x1 + x2 + x3
-  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
   beta_s_formula_character <- as.character(update(beta_s_formula, . ~ . + 1))[3]
   beta_s_formula_symbol <- rlang::parse_expr(beta_s_formula_character)
   wcls_formula <- update(beta_h_formula, bquote(. ~ . + .(beta_s_formula_symbol)))
@@ -191,39 +178,45 @@ drwcls <- function(data) {
   
   # Tilting Model
   # Try simpler model if there's a warning
-  tilt_mod <- tryCatch(
-    glm(
-      is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
-      family=binomial(), data=data),
-    warning=function(w) tryCatch(
+  if (is.null(tilt_formula)) {
+    tilt_mod <- tryCatch(
       glm(
-        is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+        is_internal ~ bs(x1, df=3, degree=2)*I(bs(x2, df=3, degree=2)),
         family=binomial(), data=data),
-      warning=function(w) glm(
-        is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
-        family=binomial(), data=data)
+      warning=function(w) tryCatch(
+        glm(
+          is_internal ~ bs(x1, df=2, degree=2)*I(bs(x2, df=2, degree=2)),
+          family=binomial(), data=data),
+        warning=function(w) glm(
+          is_internal ~ bs(x1, df=1, degree=1)*I(bs(x2, df=1, degree=1)),
+          family=binomial(), data=data)
+      )
     )
-  )
-  delta <- coef(tilt_mod)
-  tilt_warning <- length(delta) <= 10
+    tilt_warning <- length(coef(tilt_mod)) <= 10
+  } else {
+    tilt_mod <- glm(tilt_formula, family=binomial(), data=data)
+    tilt_warning <- FALSE
+  }
+  omega <- coef(tilt_mod)
+  tilt_warning <- length(omega) <= 10
   pi_internal <- mean(data$is_internal)
-  delta[1] <- delta[1] - log(pi_internal / (1-pi_internal))
-  X_delta <- model.matrix(tilt_mod)
-  data$raw_tilt_ratios <- c(exp(X_delta %*% delta))
+  omega[1] <- omega[1] - log(pi_internal / (1-pi_internal))
+  X_omega <- model.matrix(tilt_mod)
+  data$raw_tilt_ratios <- c(exp(X_omega %*% omega))
   data$tilt_ratios <- data$is_internal + data$is_external * data$raw_tilt_ratios
   data$w_and_tilt <- data$w * data$tilt_ratios
   
   # DRP-WCLS
   data_internal <- data[data$is_internal,]
-  r_formula <- y_tilde ~ x1
   r_mod <- glm(r_formula, data=data_internal)
   beta_r <- coef(r_mod)
   
   # DRET-WCLS
   data_external <- data[data$is_external,]
-  X_beta_r_internal <- model.matrix(r_formula, data=data_internal)
+  r_formula_updated <- update(r_formula, y_tilde ~ .)
+  X_beta_r_internal <- model.matrix(r_formula_updated, data=data_internal)
   XtX_beta_r_internal <- crossprod(X_beta_r_internal)
-  X_beta_r_external <- model.matrix(r_formula, data=data_external)
+  X_beta_r_external <- model.matrix(r_formula_updated, data=data_external)
   beta_r_et <- c(solve(XtX_beta_r_internal / pi_internal, (
     (t(X_beta_r_internal) %*% data_internal$wcls_s_causal_effects) / pi_internal +
       (t(X_beta_r_external) %*% (data_external$tilt_ratios * data_external$y_tilde_frac)) / (1 - pi_internal)
@@ -244,16 +237,15 @@ drwcls <- function(data) {
     alpha_s,
     beta_h,
     beta_s,
-    delta,
+    omega,
     beta_r,
     beta_r_et
   )
   n_params <- length(vector_estimate)
   
   # Standard errors
-  sandwich_list <- dr_sandwich(data, models, beta_h_formula, beta_s_formula)
-  sandwich <- sandwich_list$sandwich
-  pos_beta_r <- length(alpha_s) + length(beta_hs) + length(delta) + 1 + seq(2*length(beta_r))
+  sandwich <- dr_sandwich(data, models, beta_h_formula, beta_s_formula, is_balanced=is_balanced)
+  pos_beta_r <- length(alpha_s) + length(beta_hs) + length(omega) + 1 + seq(2*length(beta_r))
   var_beta_r <- sandwich[pos_beta_r, pos_beta_r]
   Lambda <- chol2inv(chol(var_beta_r))
   half_d_r <- length(beta_r)
@@ -280,8 +272,6 @@ drwcls <- function(data) {
     beta_r_chi2=beta_r_pooled_chi2,
     beta_r_z_scores=beta_r_pooled_z_scores,
     sandwich=sandwich,
-    bread=sandwich_list$bread,
-    meat=sandwich_list$meat,
     n=nrow(data),
     p=nrow(sandwich),
     tilt_warning=tilt_warning
