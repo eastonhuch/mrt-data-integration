@@ -607,11 +607,11 @@ make_table <- function(table_sample_size, method_vector=method_names) {
   )
   
   colnames(result_table) <- c(
-    "\\multirow{2}{*}{\\parbox{1pt}{Coefficient Name}}",
-    "\\multirow{2}{*}{\\parbox{25pt}{True Value}}",
+    "\\multirow{2}{*}{\\parbox{1pt}{Coefficient name}}",
+    "\\multirow{2}{*}{\\parbox{25pt}{True value}}",
     "\\multirow{2}{*}{\\parbox{1pt}{Method}}",
-    "\\multirow{2}{*}{\\parbox{42pt}{Avg\\\\Estimate}}",
-    "\\multirow{2}{*}{\\parbox{48pt}{Relative\\\\Efficiency}}",
+    "\\multirow{2}{*}{\\parbox{42pt}{Avg\\\\estimate}}",
+    "\\multirow{2}{*}{\\parbox{48pt}{Relative\\\\efficiency}}",
     "\\multirow{2}{*}{\\parbox{28pt}{rMSE}}",
     "\\multirow{2}{*}{\\parbox{40pt}{Coverage}}"
   )
@@ -624,12 +624,14 @@ make_table <- function(table_sample_size, method_vector=method_names) {
       "Results from the simulation with",
       table_sample_size,
       "individuals in both the internal and external studies.
-For the Avg Estimate and Coverage columns, the boldface indicates values within Monte Carlo error ($3\\sigma$) of the truth.
-For the Relative Efficiency and rMSE columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases)."
+For the ``Avg estimate'' and ``Coverage'' columns, the boldface indicates values within Monte Carlo error ($3\\sigma$) of the truth.
+For the ``Relative efficiency'' and ``rMSE'' columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases)."
       )
     ) %>% print(
       sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),
-      include.rownames = FALSE) %>%
+      include.rownames = FALSE,
+      table.placement=NULL,
+      floating.environment = "table*") %>%
     str_replace("&  &  \\\\\\\\ \\n", "&  &  \\\\\\\\\n\\\\hline\n") %>% 
     str_replace("\\\\hline\\n &  &  ", " &  &  ") %>%
     str_replace("\\n  \\\\multirow\\{10\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{10}{*}{Slope}")
