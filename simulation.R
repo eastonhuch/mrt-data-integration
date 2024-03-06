@@ -91,7 +91,7 @@ simulate_one <- function(n_internal, n_external) {
   results_dr_wcls <- process_results(model_dr_wcls)
   
   # PET-WCLS
-  model_pet_wcls <- petwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, et_beta_r_formula, a_intercept_formula)
+  model_pet_wcls <- petwcls(dat, beta_r_true, beta_h_formula, beta_s_formula, et_beta_r_formula, pwcls_r_formula, a_intercept_formula)
   results_pet_wcls <- process_results(model_pet_wcls)
   
   # Bind results together
@@ -199,7 +199,7 @@ create_pretty_table <- function(result_list) {
 
 # Run simulation across many sample sizes
 loop_start_time <- Sys.time()
-n_replications <- 2
+n_replications <- 400
 result_df <- NULL
 results_25_25 <- NULL
 sample_sizes <- c(25, 100, 400, 1600, 6400)
