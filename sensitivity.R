@@ -20,36 +20,34 @@ require(scales)
 require(stringr)
 require(splines)
 
-# True value of beta_r
-beta_r_true <- c(1, 2)
-coef_names <- c("Intercept", "Slope")
-names(beta_r_true) <- coef_names
-method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
-beta_h_formula <- y ~ x1 + x2 + x3
-beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
-beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
-et_beta_h_formula <- y ~ 0 + I(as.numeric(is_internal)) + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3) + I(as.numeric(is_external)) + I(is_external*x1) + I(is_external*x2) + I(is_external*x3)
-et_beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
-pwcls_r_formula <- wcls_s_causal_effects ~ x1
-a_intercept_formula <- a ~ 1
-p_h_formula <- a ~ 1 + as.numeric(is_internal) + x1 + x2 + x3
+sensitivity_analysis <- function(beta_r_true, sens_label, x2_coef=-3, x21sq_coef=0) {
+  coef_names <- c("Intercept", "Slope")
+  names(beta_r_true) <- coef_names
+  method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "P-WCLS-Pooled-Obs", "ET-WCLS-Equal", "ET-WCLS-Kron", "ET-WCLS", "DR-WCLS", "PET-WCLS")
+  beta_h_formula <- y ~ x1 + x2 + x3
+  beta_s_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1) + I(a_centered * x2)
+  beta_r_formula <- y ~ 0 + I(a_centered) + I(a_centered * x1)
+  et_beta_h_formula <- y ~ 0 + I(as.numeric(is_internal)) + I(is_internal*x1) + I(is_internal*x2) + I(is_internal*x3) + I(as.numeric(is_external)) + I(is_external*x1) + I(is_external*x2) + I(is_external*x3)
+  et_beta_r_formula <- y ~ 0 + I(is_internal * a_centered) + I(is_internal * a_centered * x1) + I(is_external * a_centered) + I(is_external * a_centered * x1)
+  pwcls_r_formula <- wcls_s_causal_effects ~ x1
+  a_intercept_formula <- a ~ 1
+  p_h_formula <- a ~ 1 + as.numeric(is_internal) + x1 + x2 + x3
 
-process_results <- function(model) {
-  dof <- model$n - model$p
-  t_quantile <- qt(0.975, dof)
-  covered <- (
-    (beta_r_true >= model$beta_r - t_quantile * model$se_beta_r) & 
-      (beta_r_true <= model$beta_r + t_quantile * model$se_beta_r))
-  results <- cbind(
-    estimate=model$beta_r,
-    se=model$se_beta_r,
-    covered=covered,
-    tilt_warning=model$tilt_warning
-  )
-  results
-}
+  process_results <- function(model) {
+    dof <- model$n - model$p
+    t_quantile <- qt(0.975, dof)
+    covered <- (
+      (beta_r_true >= model$beta_r - t_quantile * model$se_beta_r) & 
+        (beta_r_true <= model$beta_r + t_quantile * model$se_beta_r))
+    results <- cbind(
+      estimate=model$beta_r,
+      se=model$se_beta_r,
+      covered=covered,
+      tilt_warning=model$tilt_warning
+    )
+    results
+  }
 
-sensitivity_analysis <- function(x2_coef=-3, x21sq_coef=0) {
   # Function for simulating one data set and applying methods
   simulate_one <- function(n_internal, n_external) {
     dat <- generate_data(t_max=20, dof=10, n_internal=n_internal, n_external=n_external, ar_param=0.5, x2_coef=x2_coef, x21sq_coef=x21sq_coef)
@@ -222,7 +220,7 @@ sensitivity_analysis <- function(x2_coef=-3, x21sq_coef=0) {
   loop_end_time <- Sys.time()
   loop_time <- loop_end_time - loop_start_time
   estimated_time_full <- loop_time * 400 / n_replications
-  print(paste("Estimated time for full run:", estimated_time_full))
+  print(paste("Full run time:", estimated_time_full))
   
   # Checkpoint result dataframe
   result_df_file <- "./results/simulation_results.csv"
@@ -342,7 +340,7 @@ sensitivity_analysis <- function(x2_coef=-3, x21sq_coef=0) {
     
     xtable_results <- xtable(
       result_table,
-      label="simulation-x2-0",
+      label=sens_label,
       caption=paste(
         "Results from the simulation with",
         table_sample_size,
@@ -354,7 +352,8 @@ sensitivity_analysis <- function(x2_coef=-3, x21sq_coef=0) {
         sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),
         include.rownames = FALSE,
         table.placement=NULL,
-        floating.environment = "table*") %>%
+        floating.environment = "table*",
+        print.results=TRUE) %>%
       str_replace("&  &  \\\\\\\\ \\n", "&  &  \\\\\\\\\n\\\\hline\n") %>% 
       str_replace("\\\\hline\\n &  &  ", " &  &  ") %>%
       str_replace("\\n  \\\\multirow\\{10\\}\\{\\*\\}\\{Slope\\}", "\n \\\\hline \n  \\\\multirow{10}{*}{Slope}")
@@ -363,9 +362,9 @@ sensitivity_analysis <- function(x2_coef=-3, x21sq_coef=0) {
   
   table_method_names <- c("WCLS-Internal", "WCLS-Pooled", "P-WCLS-Internal", "P-WCLS-Pooled", "ET-WCLS", "DR-WCLS", "PET-WCLS")
   make_table(400, method_vector=table_method_names)  # This is the one shown in the paper
-  make_table(400)
+  # make_table(400)  # All 10 methods
 }
 
-sensitivity_analysis(x2_coef=0, x21sq_coef=0)
-sensitivity_analysis(x2_coef=2, x21sq_coef=0)
-sensitivity_analysis(x2_coef=-3, x21sq_coef=0.3)
+sensitivity_analysis(c(1, 2), "simulation-x2-0", x2_coef=0, x21sq_coef=0)
+sensitivity_analysis(c(3, 0), "simulation-x2-2", x2_coef=2, x21sq_coef=0)
+sensitivity_analysis(c(-2, 5), "simulation-x12sq", x2_coef=-3, x21sq_coef=0.3)
