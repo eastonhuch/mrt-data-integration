@@ -154,7 +154,6 @@ simulate_all <- function(n_internal, n_external, n_replications) {
 }
 
 # Make table
-# Let's do this one parameter at a time
 create_pretty_table <- function(result_list) {
   n_methods <- ncol(result_list$coverage)
   n_coefs <- nrow(result_list$coverage)
@@ -208,10 +207,6 @@ sample_size_pairs <- list(
   c(100, 25), c(100, 400), c(100, 1600), c(100, 6400),
   c(25, 100), c(400, 100), c(1600, 100), c(6400, 100)
 )
-# For checking results fast
-# sample_size_pairs <- list(c(100, 100), c(20, 200))
-# sample_size_pairs <- list(c(100, 100))
-# n_replications <- 20
 
 for (sample_size_pair in sample_size_pairs) {
   print(sample_size_pair)
@@ -252,9 +247,6 @@ loop_time <- loop_end_time - loop_start_time
 estimated_time_full <- loop_time * 400 / n_replications
 print(paste("Estimated time for full run:", estimated_time_full))
 
-# For recreating just results_25_25
-# results_25_25 <- simulate_all(25, 25, n_replications)
-
 # Checkpoint result dataframe
 result_df_file <- "./results/simulation_results.csv"
 write.csv(result_df, file=result_df_file, row.names=FALSE)
@@ -286,12 +278,7 @@ load(results_6400_6400_file)
 unbiased_method_names <- method_names[method_names != "WCLS-Pooled"]
 methods_for_se_plot <- c(
   "WCLS-Internal",
-  # "WCLS-Pooled"
-  # "P-WCLS-Internal",
   "P-WCLS-Pooled",
-  # "P-WCLS-Pooled-Obs",
-  # "ET-WCLS-Equal",
-  # "ET-WCLS-Kron",
   "ET-WCLS",
   "DR-WCLS",
   "PET-WCLS"
@@ -305,8 +292,7 @@ method_colors <- c(
   "#e7ca60",
   "#a87c9f",
   "#f1a2a9",
-  "#967662"#,
-  #"#b8b0ac"
+  "#967662"
 )
 names(method_colors) <- c(
   "WCLS-Internal",
@@ -314,7 +300,6 @@ names(method_colors) <- c(
   "P-WCLS-Internal",
   "P-WCLS-Pooled",
   "P-WCLS-Pooled-Obs",
-  # "ET-WCLS-Equal",
   "ET-WCLS-Kron",
   "ET-WCLS",
   "DR-WCLS",
@@ -348,11 +333,9 @@ for (coef_counter in seq_along(beta_r_true)) {
   all_ses <- result_df_100_internal %>%
     filter(`Coefficient Name` == coef_name) %>%
     pull(`Empirical Standard Error`)
-    # pull(`Analytical Standard Error`)
   min_se <- min(all_ses)
   max_se <- max(all_ses)
   plot(NULL, type="n", xlim=c(20, 6800), 
-       # ylim=c(0.5*min_se, 1.2*max_se),
        ylim=c(0.2, 8),
        log="xy", xaxt="n", yaxt="n",
        xlab=expression(n[external]), ylab="", main=mains[[coef_counter]])
@@ -360,9 +343,6 @@ for (coef_counter in seq_along(beta_r_true)) {
   axis(side=2, at=y_axticks[c(2, 4, 6)], labels=y_axtick_labels[c(2, 4, 6)])
   axis(side=1, at=sample_sizes[c(1, 3, 5)], labels=comma(sample_sizes[c(1, 3, 5)]))
   axis(side=1, at=sample_sizes[c(2, 4)], labels=comma(sample_sizes[c(2, 4)]))
-  # if (coef_counter == 1) {
-  #   legend("bottomleft", legend=methods_for_se_plot, col=seq_along(methods_for_se_plot), lty=1, bg="white")
-  # }
   method_counter <- 0
   for (method in methods_for_se_plot) {
     method_counter <- method_counter + 1
@@ -372,7 +352,6 @@ for (coef_counter in seq_along(beta_r_true)) {
     lines(
       result_df_100_internal_i$`External Sample Size`,
       result_df_100_internal_i$`Empirical Standard Error`,
-      # result_df_100_internal_i$`Analytical Standard Error`,
       type="b",
       col=method_colors[method],
       lwd=2
@@ -387,11 +366,9 @@ for (coef_counter in seq_along(beta_r_true)) {
   all_ses <- result_df_100_external %>%
     filter(`Coefficient Name` == coef_name) %>%
     pull(`Empirical Standard Error`)
-    # pull(`Analytical Standard Error`)
   min_se <- min(all_ses)
   max_se <- max(all_ses)
   plot(NULL, type="n", xlim=c(20, 6800),
-       # ylim=c(0.5*min_se, 1.2*max_se), 
        ylim=c(0.2, 8),
        log="xy", xaxt="n", yaxt="n",
        xlab=expression(n[internal]), ylab="", main=mains[2+coef_counter])
@@ -408,7 +385,6 @@ for (coef_counter in seq_along(beta_r_true)) {
     lines(
       result_df_100_external_i$`Internal Sample Size`,
       result_df_100_external_i$`Empirical Standard Error`,
-      # result_df_100_external_i$`Analytical Standard Error`,
       type="b",
       col=method_colors[method],
       lwd=2
@@ -439,7 +415,7 @@ boxplots_400_400_df <- estimates_400_400_df %>% mutate(
   Method = fct_reorder(Method, MethodNumber),
   Coefficient = fct_reorder(Coefficient, CoefficientNumber)
 ) %>% filter(Method != "ET-WCLS-Equal")
-# NOTE: I filtered out ET-WCLS-Equal because it makes the y-axis too large
+# NOTE: ET-WCLS-Equal is filtered out because it makes the y-axis too large
 
 pdf("./figures/estimates_400_400.pdf", width=10, height=3)
 boxplot_linewidth <- 0.3
@@ -459,54 +435,11 @@ ggplot() +
   )
 dev.off()
 
-# Plot confidence intervals for first two methods
-# estimates_100_100 <- results_100_100$results[,"estimate",,]
-# 
-# pdf("./figures/x1_se_plot.pdf",
-#     width=6.5, height=2.5)
-# par(mfrow=c(1, 3), mai=c(0.6, 0.6, 0.5, 0.07), cex.main=1.5, cex.axis=0.9, cex.lab=1.2)
-# 
-# dat <- generate_data(n_internal=100000, n_external=100000)
-# max_abs_x1 <- round(max(abs(dat$x1)), 1) + 0.2
-# x1_values <- seq(-max_abs_x1, max_abs_x1, 0.2)
-# hist(dat$x1, breaks=x1_values, probability=TRUE, xlab=expression(X[1]), main="(a) Histogram")
-# 
-# x1_design_matrix <- cbind(1, x1_values)
-# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(-50, 1100),
-#      xlab=expression(X[1]), ylab="Causal Effect",
-#      main="(b) 95% CIs")
-# dash_lty <- 2
-# x1_plot_method_numbers <- c(1, 3)
-# for (method_number in x1_plot_method_numbers) {
-#   method_name <- method_names[method_number]
-#   method_estimates <- estimates_100_100[,method_name,]
-#   method_fitted_values <- x1_design_matrix %*% method_estimates
-#   mean_method_fitted_values <- rowMeans(method_fitted_values)
-#   lines(x1_values, mean_method_fitted_values, col=method_number)
-#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.0100)), col=method_number, lty=dash_lty)
-#   lines(x1_values, apply(method_fitted_values, MARGIN=1, function(x) quantile(x, probs=0.975)), col=method_number, lty=dash_lty)
-# }
-# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers, cex=0.85)
-# 
-# plot(NULL, type="n", xlim=c(-max_abs_x1, max_abs_x1), ylim=c(0, 29),
-#      xlab=expression(X[1]), ylab="Standard Error",
-#      main="(c) SE Comparison")
-# for (method_number in x1_plot_method_numbers) {
-#   method_name <- method_names[method_number]
-#   method_estimates <- estimates_100_100[,method_name,]
-#   method_fitted_values <- x1_design_matrix %*% method_estimates
-#   method_ses <- apply(method_fitted_values, MARGIN=1, sd)
-#   lines(x1_values, method_ses, col=method_number)
-# }
-# legend("topleft", legend=method_names[x1_plot_method_numbers], lty=1, col=x1_plot_method_numbers)
-# 
-# dev.off()
 
 # Number of warnings by method/sample size
 result_df %>%
   group_by(Method, `Internal Sample Size`, `External Sample Size`) %>%
-  summarise(`# Tilt Warnings`=sum(`# Tilt Warnings`))
-  
+  summarise(`# Tilt Warnings`=sum(`# Tilt Warnings`))  
 
 # Table
 print_exact_number_nicely <- function(x, digits=1) {
@@ -625,7 +558,8 @@ make_table <- function(table_sample_size, method_vector=method_names) {
       table_sample_size,
       "individuals in both the internal and external studies.
 For the ``Avg estimate'' and ``Coverage'' columns, the boldface indicates values within Monte Carlo error ($3\\sigma$) of the truth.
-For the ``Relative efficiency'' and ``rMSE'' columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases)."
+For the ``Relative efficiency'' and ``rMSE'' columns, the boldface indicates the best performance for each coefficient (PET-WCLS in both cases).
+Relative efficiency is computed as a ratio of empirically estimated standard errors."
       )
     ) %>% print(
       sanitize.text.function = function(x) gsub("\\%", "\\\\\\%", x),

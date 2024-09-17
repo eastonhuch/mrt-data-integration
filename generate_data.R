@@ -1,7 +1,7 @@
 # Function for simulating data
 generate_data <- function(
   t_max=20, dof=10, n_internal=100, n_external=100,
-  ar_param=0.5, plot_simulated_data=FALSE) {
+  ar_param=0.5, plot_simulated_data=FALSE, x2_coef=-3, x21sq_coef=0) {
   
   # Internal indicator
   n <- n_internal + n_external
@@ -20,7 +20,7 @@ generate_data <- function(
     )[1:t_max,])
   }
   r <- x1 <- gen_ar1_matrix()
-  x2 <- is_internal * (1 - x1 + 3 * rt(n_obs, dof)) +
+  x2 <- is_internal * (1 - x1 + x21sq_coef * x1^2 + 3 * rt(n_obs, dof)) +
         is_external * (2.7 * rt(n_obs, dof))
   # These values make the distributions similar enough that ET-WCLS works but different
   # enough that you see some differences in efficiency based on the pooling method
@@ -59,7 +59,7 @@ generate_data <- function(
   
   # Outcomes
   epsilon <- gen_ar1_matrix()
-  treatment_effects <- 1 + 2*x1 - 3*x2
+  treatment_effects <- 1 + 2*x1 + x2_coef*x2
   y <- 4 + 2*x1- 1.5*x1*x2 + 0.4*x3^3 + a*treatment_effects + epsilon
   
   # Marginal treatment effects
